@@ -8,14 +8,25 @@
 import SwiftUI
 
 struct ContentView: View {
+    @State private var isLoggedIn = false
+    @State private var showSignUp = false
+
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
+        if isLoggedIn {
+            MainTabView {
+                isLoggedIn = false
+            }
+        } else if showSignUp {
+            SignupView(
+                onSignupSuccess: { isLoggedIn = true },
+                onTransitionLogin: { showSignUp = false }
+            )
+        } else {
+            LoginView(
+                onLoginSuccess: { isLoggedIn = true },
+                onTransitionSignup: { showSignUp = true }
+            )
         }
-        .padding()
     }
 }
 
