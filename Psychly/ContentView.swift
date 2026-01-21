@@ -8,28 +8,21 @@
 import SwiftUI
 
 struct ContentView: View {
-    @State private var isLoggedIn = false
+    @EnvironmentObject var authManager: AuthenticationManager
     @State private var showSignUp = false
 
     var body: some View {
-        if isLoggedIn {
-            MainTabView {
-                isLoggedIn = false
-            }
+        if authManager.isAuthenticated {
+            MainTabView()
         } else if showSignUp {
-            SignupView(
-                onSignupSuccess: { isLoggedIn = true },
-                onTransitionLogin: { showSignUp = false }
-            )
+            SignupView(onTransitionLogin: { showSignUp = false })
         } else {
-            LoginView(
-                onLoginSuccess: { isLoggedIn = true },
-                onTransitionSignup: { showSignUp = true }
-            )
+            LoginView(onTransitionSignup: { showSignUp = true })
         }
     }
 }
 
 #Preview {
     ContentView()
+        .environmentObject(AuthenticationManager())
 }

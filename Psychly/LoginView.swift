@@ -6,14 +6,14 @@
 //
 
 import SwiftUI
-import AuthenticationServices
 
 struct LoginView: View {
+    @EnvironmentObject var authManager: AuthenticationManager
     @State private var email = ""
     @State private var password = ""
     @State private var isPasswordVisible = false
+    @State private var showErrorAlert = false
 
-    var onLoginSuccess: () -> Void
     var onTransitionSignup: () -> Void
 
     var body: some View {
@@ -79,51 +79,33 @@ struct LoginView: View {
 
             // Sign In Button
             Button {
-                // Placeholder - no backend integration
-                onLoginSuccess()
+                Task {
+                    do {
+                        try await authManager.signIn(email: email, password: password)
+                    } catch {
+                        showErrorAlert = true
+                    }
+                }
             } label: {
-                Text("Sign In")
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.blue)
-                    .cornerRadius(10)
-            }
-            .padding(.top, 10)
-
-            // Divider with "or"
-            HStack {
-                Rectangle()
-                    .frame(height: 1)
-                    .foregroundStyle(Color(.systemGray4))
-
-                Text("or")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 10)
-
-                Rectangle()
-                    .frame(height: 1)
-                    .foregroundStyle(Color(.systemGray4))
-            }
-            .padding(.vertical, 10)
-
-            // Sign in with Apple Button
-            SignInWithAppleButton(.signIn) { request in
-                request.requestedScopes = [.fullName, .email]
-            } onCompletion: { result in
-                // Placeholder - no backend integration
-                switch result {
-                case .success:
-                    onLoginSuccess()
-                case .failure(let error):
-                    print("Sign in with Apple failed: \(error.localizedDescription)")
+                if authManager.isLoading {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.blue)
+                        .cornerRadius(10)
+                } else {
+                    Text("Sign In")
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.blue)
+                        .cornerRadius(10)
                 }
             }
-            .signInWithAppleButtonStyle(.black)
-            .frame(height: 50)
-            .cornerRadius(10)
+            .disabled(authManager.isLoading || email.isEmpty || password.isEmpty)
+            .padding(.top, 10)
 
             Spacer()
 
@@ -143,9 +125,17 @@ struct LoginView: View {
             .padding(.bottom, 20)
         }
         .padding(.horizontal, 30)
+        .alert("Error", isPresented: $showErrorAlert) {
+            Button("OK", role: .cancel) {
+                authManager.errorMessage = nil
+            }
+        } message: {
+            Text(authManager.errorMessage ?? "An error occurred")
+        }
     }
 }
 
 #Preview {
-    LoginView(onLoginSuccess: {}, onTransitionSignup: {})
+    LoginView(onTransitionSignup: {})
+        .environmentObject(AuthenticationManager())
 }

@@ -6,6 +6,11 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		BCF932E82F2165A0004108C2 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = BCF932E72F2165A0004108C2 /* FirebaseAuth */; };
+		BCF932EA2F2165A0004108C2 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = BCF932E92F2165A0004108C2 /* FirebaseCore */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		BC2AE6062F20012400AB9B0A /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -52,6 +57,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BCF932EA2F2165A0004108C2 /* FirebaseCore in Frameworks */,
+				BCF932E82F2165A0004108C2 /* FirebaseAuth in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -112,6 +119,8 @@
 			);
 			name = Psychly;
 			packageProductDependencies = (
+				BCF932E72F2165A0004108C2 /* FirebaseAuth */,
+				BCF932E92F2165A0004108C2 /* FirebaseCore */,
 			);
 			productName = Psychly;
 			productReference = BC2AE5F82F20012100AB9B0A /* Psychly.app */;
@@ -195,6 +204,9 @@
 			);
 			mainGroup = BC2AE5EF2F20012100AB9B0A;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				BCF932E42F200B6B004108C2 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = BC2AE5F92F20012100AB9B0A /* Products */;
 			projectDirPath = "";
@@ -395,6 +407,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Psychly/Psychly.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = QBLGZ24JMA;
@@ -423,6 +436,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Psychly/Psychly.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = QBLGZ24JMA;
@@ -558,6 +572,30 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		BCF932E42F200B6B004108C2 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 12.8.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		BCF932E72F2165A0004108C2 /* FirebaseAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BCF932E42F200B6B004108C2 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAuth;
+		};
+		BCF932E92F2165A0004108C2 /* FirebaseCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BCF932E42F200B6B004108C2 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCore;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = BC2AE5F02F20012100AB9B0A /* Project object */;
 }

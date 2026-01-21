@@ -8,8 +8,6 @@
 import SwiftUI
 
 struct MainTabView: View {
-    var onLogout: () -> Void
-
     var body: some View {
         TabView {
             HomeView()
@@ -22,7 +20,7 @@ struct MainTabView: View {
                     Label("Calendar", systemImage: "calendar")
                 }
 
-            ProfileView(onLogout: onLogout)
+            ProfileView()
                 .tabItem {
                     Label("Profile", systemImage: "person.fill")
                 }
@@ -31,5 +29,6 @@ struct MainTabView: View {
 }
 
 #Preview {
-    MainTabView(onLogout: {})
+    MainTabView()
+        .environmentObject(AuthenticationManager())
 }

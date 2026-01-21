@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct ProfileView: View {
-    var onLogout: () -> Void
+    @EnvironmentObject var authManager: AuthenticationManager
 
     var body: some View {
         NavigationStack {
@@ -26,11 +26,17 @@ struct ProfileView: View {
                     .font(.title2)
                     .fontWeight(.semibold)
 
+                if let email = authManager.currentUser?.email {
+                    Text(email)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
                 Spacer()
 
                 // Logout button
                 Button(role: .destructive) {
-                    onLogout()
+                    authManager.signOut()
                 } label: {
                     HStack {
                         Image(systemName: "rectangle.portrait.and.arrow.right")
@@ -52,5 +58,6 @@ struct ProfileView: View {
 }
 
 #Preview {
-    ProfileView(onLogout: {})
+    ProfileView()
+        .environmentObject(AuthenticationManager())
 }
