@@ -67,7 +67,14 @@ struct CalendarView: View {
                         LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 7), spacing: 0) {
                             ForEach(daysInMonth(), id: \.self) { date in
                                 if let date = date {
-                                    DayCell(date: date, isToday: isToday(date), height: cellHeight)
+                                    if isFuture(date) {
+                                        DayCell(date: date, isToday: isToday(date), isFuture: true, height: cellHeight)
+                                    } else {
+                                        NavigationLink(destination: ExperimentView(date: date)) {
+                                            DayCell(date: date, isToday: isToday(date), isFuture: false, height: cellHeight)
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
                                 } else {
                                     Color.clear
                                         .frame(height: cellHeight)
@@ -123,6 +130,12 @@ struct CalendarView: View {
         calendar.isDateInToday(date)
     }
 
+    private func isFuture(_ date: Date) -> Bool {
+        let today = calendar.startOfDay(for: Date())
+        let compareDate = calendar.startOfDay(for: date)
+        return compareDate > today
+    }
+
     private func numberOfRows() -> Int {
         let days = daysInMonth()
         return (days.count + 6) / 7
@@ -132,14 +145,25 @@ struct CalendarView: View {
 struct DayCell: View {
     let date: Date
     let isToday: Bool
+    let isFuture: Bool
     let height: CGFloat
 
     private let calendar = Calendar.current
 
+    private var textColor: Color {
+        if isToday {
+            return .white
+        } else if isFuture {
+            return Color(.systemGray3)
+        } else {
+            return .primary
+        }
+    }
+
     var body: some View {
         Text("\(calendar.component(.day, from: date))")
             .font(.system(size: min(height * 0.4, 22), weight: isToday ? .bold : .medium, design: .rounded))
-            .foregroundStyle(isToday ? .white : .primary)
+            .foregroundStyle(textColor)
             .frame(maxWidth: .infinity)
             .frame(height: height)
             .background(
