@@ -32,6 +32,15 @@ struct ProfileView: View {
                         .foregroundStyle(.secondary)
                 }
 
+                // Stats boxes
+                HStack(spacing: 12) {
+                    StatBox(icon: "globe.americas.fill", value: "#1,234", label: "World Rank")
+                    StatBox(icon: "checkmark.circle.fill", value: "42", label: "Days Achieved")
+                    StatBox(icon: "flame.fill", value: "7", label: "Streak")
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 16)
+
                 Spacer()
 
                 // Logout button
@@ -54,6 +63,33 @@ struct ProfileView: View {
             .navigationTitle("Profile")
             .navigationBarTitleDisplayMode(.inline)
         }
+    }
+}
+
+struct StatBox: View {
+    let icon: String
+    let value: String
+    let label: String
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.title2)
+                .foregroundStyle(.purple)
+
+            Text(value)
+                .font(.system(.title3, design: .rounded))
+                .fontWeight(.bold)
+
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 16)
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
     }
 }
 
