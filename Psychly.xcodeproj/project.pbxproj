@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		BCF932E82F2165A0004108C2 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = BCF932E72F2165A0004108C2 /* FirebaseAuth */; };
 		BCF932EA2F2165A0004108C2 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = BCF932E92F2165A0004108C2 /* FirebaseCore */; };
+		BCF932F12F240D6B004108C2 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = BCF932F02F240D6B004108C2 /* FirebaseFirestore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -59,6 +60,7 @@
 			files = (
 				BCF932EA2F2165A0004108C2 /* FirebaseCore in Frameworks */,
 				BCF932E82F2165A0004108C2 /* FirebaseAuth in Frameworks */,
+				BCF932F12F240D6B004108C2 /* FirebaseFirestore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -121,6 +123,7 @@
 			packageProductDependencies = (
 				BCF932E72F2165A0004108C2 /* FirebaseAuth */,
 				BCF932E92F2165A0004108C2 /* FirebaseCore */,
+				BCF932F02F240D6B004108C2 /* FirebaseFirestore */,
 			);
 			productName = Psychly;
 			productReference = BC2AE5F82F20012100AB9B0A /* Psychly.app */;
@@ -594,6 +597,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = BCF932E42F200B6B004108C2 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseCore;
+		};
+		BCF932F02F240D6B004108C2 /* FirebaseFirestore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BCF932E42F200B6B004108C2 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFirestore;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

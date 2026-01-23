@@ -100,12 +100,11 @@ struct CalendarView: View {
     }
 
     private func daysInMonth() -> [Date?] {
-        guard let monthInterval = calendar.dateInterval(of: .month, for: displayedMonth),
-              let monthFirstWeek = calendar.dateInterval(of: .weekOfMonth, for: monthInterval.start) else {
+        let components = calendar.dateComponents([.year, .month], from: displayedMonth)
+        guard let firstDayOfMonth = calendar.date(from: components) else {
             return []
         }
 
-        let firstDayOfMonth = monthInterval.start
         let firstWeekday = calendar.component(.weekday, from: firstDayOfMonth)
         let numberOfDaysInMonth = calendar.range(of: .day, in: .month, for: displayedMonth)?.count ?? 0
 
@@ -117,8 +116,8 @@ struct CalendarView: View {
         }
 
         // Add days of the month
-        for day in 1...numberOfDaysInMonth {
-            if let date = calendar.date(bySetting: .day, value: day, of: firstDayOfMonth) {
+        for day in 0..<numberOfDaysInMonth {
+            if let date = calendar.date(byAdding: .day, value: day, to: firstDayOfMonth) {
                 days.append(date)
             }
         }

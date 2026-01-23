@@ -9,11 +9,8 @@ import SwiftUI
 
 struct ExperimentView: View {
     let date: Date
-    @State private var selectedFeedback: Feedback? = nil
-
-    enum Feedback {
-        case like, dislike
-    }
+    @StateObject private var voteManager = VoteManager()
+    @StateObject private var experimentManager = ExperimentManager()
 
     private var formattedDate: String {
         let formatter = DateFormatter()
@@ -22,63 +19,146 @@ struct ExperimentView: View {
     }
 
     var body: some View {
-        VStack(spacing: 24) {
-            Text("Experiment for \(formattedDate)")
-                .font(.system(.title3, design: .rounded))
-                .fontWeight(.semibold)
-                .padding(.top, 24)
+        ScrollView {
+            VStack(spacing: 24) {
+                Text("Experiment for \(formattedDate)")
+                    .font(.system(.title3, design: .rounded))
+                    .fontWeight(.semibold)
+                    .padding(.top, 24)
 
-            // Experiment info box
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Experiment Name")
-                    .font(.system(.headline, design: .rounded))
-                    .fontWeight(.bold)
+                if experimentManager.isLoading {
+                    ProgressView("Loading experiment...")
+                        .padding(.top, 40)
+                } else if let experiment = experimentManager.experiment {
+                    // Experiment info box
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(experiment.name)
+                            .font(.system(.headline, design: .rounded))
+                            .fontWeight(.bold)
 
-                Text("Info")
-                    .font(.system(.body, design: .rounded))
-                    .foregroundStyle(.secondary)
+                        Text(experiment.info)
+                            .font(.system(.body, design: .rounded))
+                            .foregroundStyle(.secondary)
 
-                // Two stick figures looking at each other
-                StickFiguresView()
-                    .frame(height: 120)
-                    .frame(maxWidth: .infinity)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(20)
-            .background(Color(.systemGray6))
-            .cornerRadius(12)
-            .padding(.horizontal, 24)
+                        Divider()
 
-            // Like and Dislike buttons
-            HStack(spacing: 40) {
-                Button {
-                    selectedFeedback = selectedFeedback == .dislike ? nil : .dislike
-                } label: {
-                    Image(systemName: "hand.thumbsdown.fill")
-                        .font(.system(size: 32))
-                        .foregroundStyle(selectedFeedback == .dislike ? .gray : .red.opacity(0.8))
-                        .frame(width: 70, height: 70)
-                        .background(selectedFeedback == .dislike ? Color.purple : Color(.systemGray6))
-                        .cornerRadius(35)
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Date")
+                                    .font(.system(.caption, design: .rounded))
+                                    .foregroundStyle(.secondary)
+                                Text(experiment.date)
+                                    .font(.system(.subheadline, design: .rounded))
+                                    .fontWeight(.medium)
+                            }
+
+                            Spacer()
+
+                            VStack(alignment: .trailing, spacing: 4) {
+                                Text("Researchers")
+                                    .font(.system(.caption, design: .rounded))
+                                    .foregroundStyle(.secondary)
+                                Text(experiment.researchers)
+                                    .font(.system(.subheadline, design: .rounded))
+                                    .fontWeight(.medium)
+                                    .multilineTextAlignment(.trailing)
+                            }
+                        }
+
+                        Divider()
+
+                        Text("Question")
+                            .font(.system(.caption, design: .rounded))
+                            .foregroundStyle(.secondary)
+
+                        Text(experiment.question)
+                            .font(.system(.body, design: .rounded))
+                            .italic()
+                            .foregroundStyle(.purple)
+
+                        // Two stick figures looking at each other
+                        StickFiguresView()
+                            .frame(height: 120)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(20)
+                    .background(Color(.systemGray6))
+                    .cornerRadius(12)
+                    .padding(.horizontal, 24)
+                } else {
+                    // No experiment available
+                    VStack(spacing: 12) {
+                        Image(systemName: "questionmark.circle")
+                            .font(.system(size: 48))
+                            .foregroundStyle(.gray)
+
+                        Text("No experiment available for this date")
+                            .font(.system(.body, design: .rounded))
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.top, 40)
                 }
 
-                Button {
-                    selectedFeedback = selectedFeedback == .like ? nil : .like
-                } label: {
-                    Image(systemName: "hand.thumbsup.fill")
-                        .font(.system(size: 32))
-                        .foregroundStyle(selectedFeedback == .like ? .gray : .green.opacity(0.8))
-                        .frame(width: 70, height: 70)
-                        .background(selectedFeedback == .like ? Color.purple : Color(.systemGray6))
-                        .cornerRadius(35)
-                }
-            }
-            .padding(.top, 8)
+                // Like and Dislike buttons (only show if experiment exists)
+                if experimentManager.experiment != nil {
+                    HStack(spacing: 40) {
+                        VStack(spacing: 8) {
+                            Button {
+                                Task {
+                                    let newVote = voteManager.userVote == "dislike" ? nil : "dislike"
+                                    await voteManager.vote(for: date, voteType: newVote)
+                                }
+                            } label: {
+                                Image(systemName: "hand.thumbsdown.fill")
+                                    .font(.system(size: 32))
+                                    .foregroundStyle(voteManager.userVote == "dislike" ? .gray : .red.opacity(0.8))
+                                    .frame(width: 70, height: 70)
+                                    .background(voteManager.userVote == "dislike" ? Color.purple : Color(.systemGray6))
+                                    .cornerRadius(35)
+                            }
+                            .disabled(voteManager.isLoading)
 
-            Spacer()
+                            Text("\(voteManager.dislikeCount)")
+                                .font(.system(.subheadline, design: .rounded))
+                                .fontWeight(.medium)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        VStack(spacing: 8) {
+                            Button {
+                                Task {
+                                    let newVote = voteManager.userVote == "like" ? nil : "like"
+                                    await voteManager.vote(for: date, voteType: newVote)
+                                }
+                            } label: {
+                                Image(systemName: "hand.thumbsup.fill")
+                                    .font(.system(size: 32))
+                                    .foregroundStyle(voteManager.userVote == "like" ? .gray : .green.opacity(0.8))
+                                    .frame(width: 70, height: 70)
+                                    .background(voteManager.userVote == "like" ? Color.purple : Color(.systemGray6))
+                                    .cornerRadius(35)
+                            }
+                            .disabled(voteManager.isLoading)
+
+                            Text("\(voteManager.likeCount)")
+                                .font(.system(.subheadline, design: .rounded))
+                                .fontWeight(.medium)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.top, 8)
+                }
+
+                Spacer()
+            }
         }
         .navigationTitle("Experiment")
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await experimentManager.loadExperiment(for: date)
+            await voteManager.loadVotes(for: date)
+        }
     }
 }
 
