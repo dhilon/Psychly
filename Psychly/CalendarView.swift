@@ -9,6 +9,7 @@ import SwiftUI
 
 struct CalendarView: View {
     @State private var displayedMonth = Date()
+    @StateObject private var calendarManager = CalendarManager()
 
     private let calendar = Calendar.current
     private let daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
@@ -67,11 +68,14 @@ struct CalendarView: View {
                         LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 7), spacing: 0) {
                             ForEach(daysInMonth(), id: \.self) { date in
                                 if let date = date {
+                                    let hasExperiment = calendarManager.hasExperiment(for: date)
+                                    let isPastWithoutExperiment = !isFuture(date) && !isToday(date) && !hasExperiment
+
                                     if isFuture(date) {
-                                        DayCell(date: date, isToday: isToday(date), isFuture: true, height: cellHeight)
+                                        DayCell(date: date, isToday: isToday(date), isFuture: true, isPastWithoutExperiment: false, height: cellHeight)
                                     } else {
                                         NavigationLink(destination: ExperimentView(date: date)) {
-                                            DayCell(date: date, isToday: isToday(date), isFuture: false, height: cellHeight)
+                                            DayCell(date: date, isToday: isToday(date), isFuture: false, isPastWithoutExperiment: isPastWithoutExperiment, height: cellHeight)
                                         }
                                         .buttonStyle(.plain)
                                     }
@@ -90,6 +94,14 @@ struct CalendarView: View {
             }
             .navigationTitle("Calendar")
             .navigationBarTitleDisplayMode(.inline)
+            .task {
+                await calendarManager.loadExperimentDates()
+            }
+            .onChange(of: displayedMonth) {
+                Task {
+                    await calendarManager.loadExperimentDates()
+                }
+            }
         }
     }
 
@@ -145,6 +157,7 @@ struct DayCell: View {
     let date: Date
     let isToday: Bool
     let isFuture: Bool
+    let isPastWithoutExperiment: Bool
     let height: CGFloat
 
     private let calendar = Calendar.current
@@ -152,7 +165,7 @@ struct DayCell: View {
     private var textColor: Color {
         if isToday {
             return .white
-        } else if isFuture {
+        } else if isFuture || isPastWithoutExperiment {
             return Color(.systemGray3)
         } else {
             return .primary
