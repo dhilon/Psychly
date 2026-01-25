@@ -47,13 +47,21 @@ class ExperimentManager: ObservableObject {
 
             if let data = document.data() {
                 print("🟢 Found existing experiment: \(data)")
-                experiment = Experiment(
-                    name: data["name"] as? String ?? "",
-                    info: data["info"] as? String ?? "",
-                    date: data["date"] as? String ?? "",
-                    researchers: data["researchers"] as? String ?? "",
-                    question: data["question"] as? String ?? ""
-                )
+
+                // Check if this is an old experiment with "question" but no "hypothesis"
+                if data["question"] != nil && data["hypothesis"] == nil {
+                    print("🔵 Migrating old experiment to new format...")
+                    await migrateExperiment(documentId: dateStr, data: data)
+                } else {
+                    experiment = Experiment(
+                        name: data["name"] as? String ?? "",
+                        info: data["info"] as? String ?? "",
+                        date: data["date"] as? String ?? "",
+                        researchers: data["researchers"] as? String ?? "",
+                        hypothesis: data["hypothesis"] as? String ?? "",
+                        rejected: data["rejected"] as? Bool ?? false
+                    )
+                }
             } else if isToday(date) {
                 print("🔵 No experiment for today, fetching from Gemini...")
                 // No experiment for today, fetch from Gemini
@@ -91,7 +99,8 @@ class ExperimentManager: ObservableObject {
                 "info": newExperiment.info,
                 "date": newExperiment.date,
                 "researchers": newExperiment.researchers,
-                "question": newExperiment.question
+                "hypothesis": newExperiment.hypothesis,
+                "rejected": newExperiment.rejected
             ]
             print("🔵 Data to save: \(experimentData)")
 
@@ -109,5 +118,49 @@ class ExperimentManager: ObservableObject {
     private func getExistingExperimentNames() async throws -> [String] {
         let snapshot = try await db.collection("experiments").getDocuments()
         return snapshot.documents.compactMap { $0.data()["name"] as? String }
+    }
+
+    private func migrateExperiment(documentId: String, data: [String: Any]) async {
+        let name = data["name"] as? String ?? ""
+        let info = data["info"] as? String ?? ""
+
+        do {
+            // Get hypothesis and rejected from Gemini
+            let (hypothesis, rejected) = try await GeminiService.shared.generateHypothesisForExperiment(name: name, info: info)
+
+            // Update Firestore with new fields
+            try await db.collection("experiments").document(documentId).updateData([
+                "hypothesis": hypothesis,
+                "rejected": rejected
+            ])
+
+            // Optionally remove old question field
+            try await db.collection("experiments").document(documentId).updateData([
+                "question": FieldValue.delete()
+            ])
+
+            print("🟢 Successfully migrated experiment: \(name)")
+
+            // Set the experiment with new data
+            experiment = Experiment(
+                name: name,
+                info: info,
+                date: data["date"] as? String ?? "",
+                researchers: data["researchers"] as? String ?? "",
+                hypothesis: hypothesis,
+                rejected: rejected
+            )
+        } catch {
+            print("🔴 Error migrating experiment: \(error.localizedDescription)")
+            // Fallback: use empty hypothesis
+            experiment = Experiment(
+                name: name,
+                info: info,
+                date: data["date"] as? String ?? "",
+                researchers: data["researchers"] as? String ?? "",
+                hypothesis: data["question"] as? String ?? "",
+                rejected: false
+            )
+        }
     }
 }

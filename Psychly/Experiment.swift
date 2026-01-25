@@ -12,5 +12,6 @@ struct Experiment: Codable {
     let info: String
     let date: String
     let researchers: String
-    let question: String
+    let hypothesis: String
+    let rejected: Bool
 }

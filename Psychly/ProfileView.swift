@@ -9,6 +9,7 @@ import SwiftUI
 
 struct ProfileView: View {
     @EnvironmentObject var authManager: AuthenticationManager
+    @StateObject private var userStatsManager = UserStatsManager()
 
     var body: some View {
         NavigationStack {
@@ -34,9 +35,9 @@ struct ProfileView: View {
 
                 // Stats boxes
                 HStack(spacing: 12) {
-                    StatBox(icon: "globe.americas.fill", value: "#1,234", label: "World Rank")
-                    StatBox(icon: "checkmark.circle.fill", value: "42", label: "Days Achieved")
-                    StatBox(icon: "flame.fill", value: "7", label: "Streak")
+                    StatBox(icon: "globe.americas.fill", value: userStatsManager.worldRank > 0 ? "#\(userStatsManager.worldRank)" : "-", label: "World Rank")
+                    StatBox(icon: "checkmark.circle.fill", value: "\(userStatsManager.daysAchieved)", label: "Days Achieved")
+                    StatBox(icon: "flame.fill", value: "\(userStatsManager.streak)", label: "Streak")
                 }
                 .padding(.horizontal, 24)
                 .padding(.top, 16)
@@ -62,6 +63,9 @@ struct ProfileView: View {
             }
             .navigationTitle("Profile")
             .navigationBarTitleDisplayMode(.inline)
+            .task {
+                await userStatsManager.loadStats()
+            }
         }
     }
 }
