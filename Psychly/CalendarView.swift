@@ -10,6 +10,7 @@ import SwiftUI
 struct CalendarView: View {
     @State private var displayedMonth = Date()
     @StateObject private var calendarManager = CalendarManager()
+    @StateObject private var userStatsManager = UserStatsManager()
 
     private let calendar = Calendar.current
     private let daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
@@ -70,12 +71,14 @@ struct CalendarView: View {
                                 if let date = date {
                                     let hasExperiment = calendarManager.hasExperiment(for: date)
                                     let isPastWithoutExperiment = !isFuture(date) && !isToday(date) && !hasExperiment
+                                    let answer = userStatsManager.getAnswer(for: date)
+                                    let badgeIcon = calendarManager.getBadgeIcon(for: date)
 
                                     if isFuture(date) {
-                                        DayCell(date: date, isToday: isToday(date), isFuture: true, isPastWithoutExperiment: false, height: cellHeight)
+                                        DayCell(date: date, isToday: isToday(date), isFuture: true, isPastWithoutExperiment: false, height: cellHeight, badgeIcon: nil, answerState: nil)
                                     } else {
                                         NavigationLink(destination: ExperimentView(date: date)) {
-                                            DayCell(date: date, isToday: isToday(date), isFuture: false, isPastWithoutExperiment: isPastWithoutExperiment, height: cellHeight)
+                                            DayCell(date: date, isToday: isToday(date), isFuture: false, isPastWithoutExperiment: isPastWithoutExperiment, height: cellHeight, badgeIcon: badgeIcon, answerState: answer?.correct)
                                         }
                                         .buttonStyle(.plain)
                                     }
@@ -96,6 +99,7 @@ struct CalendarView: View {
             .navigationBarTitleDisplayMode(.inline)
             .task {
                 await calendarManager.loadExperimentDates()
+                await userStatsManager.loadStats()
             }
             .onChange(of: displayedMonth) {
                 Task {
@@ -159,11 +163,13 @@ struct DayCell: View {
     let isFuture: Bool
     let isPastWithoutExperiment: Bool
     let height: CGFloat
+    let badgeIcon: String?
+    let answerState: Bool?  // nil = not answered, true = correct, false = incorrect
 
     private let calendar = Calendar.current
 
     private var textColor: Color {
-        if isToday {
+        if isToday || answerState != nil {
             return .white
         } else if isFuture || isPastWithoutExperiment {
             return Color(.systemGray3)
@@ -172,17 +178,44 @@ struct DayCell: View {
         }
     }
 
+    private var badgeColor: Color {
+        guard let correct = answerState else {
+            return .clear
+        }
+        return correct ? .green : .red
+    }
+
+    private var backgroundColor: Color {
+        if isToday {
+            return Color.purple.opacity(0.6)
+        } else if answerState != nil {
+            return badgeColor.opacity(0.7)
+        } else {
+            return .clear
+        }
+    }
+
     var body: some View {
-        Text("\(calendar.component(.day, from: date))")
-            .font(.system(size: min(height * 0.4, 22), weight: isToday ? .bold : .medium, design: .rounded))
-            .foregroundStyle(textColor)
-            .frame(maxWidth: .infinity)
-            .frame(height: height)
-            .background(
-                Circle()
-                    .fill(isToday ? Color.purple.opacity(0.6) : Color.clear)
-                    .frame(width: min(height * 0.8, 44), height: min(height * 0.8, 44))
-            )
+        ZStack {
+            // Background circle (purple for today, green/red for answered)
+            Circle()
+                .fill(backgroundColor)
+                .frame(width: min(height * 0.8, 44), height: min(height * 0.8, 44))
+
+            // Badge icon behind the number (subtle, larger)
+            if let icon = badgeIcon, answerState != nil {
+                Image(systemName: icon)
+                    .font(.system(size: min(height * 0.5, 28)))
+                    .foregroundStyle(.white.opacity(0.3))
+            }
+
+            // Date number on top
+            Text("\(calendar.component(.day, from: date))")
+                .font(.system(size: min(height * 0.4, 22), weight: isToday || answerState != nil ? .bold : .medium, design: .rounded))
+                .foregroundStyle(textColor)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: height)
     }
 }
 

@@ -6,12 +6,14 @@
 //
 
 import Foundation
+import UIKit
 
 class GeminiService {
     static let shared = GeminiService()
 
     private let apiKey: String
     private let baseURL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+    private let imagenURL = "https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict"
 
     private init() {
         // Load API key from Secrets.plist
@@ -253,6 +255,242 @@ class GeminiService {
 
         // Fallback
         return ("The researchers hypothesized that their experimental manipulation would produce significant behavioral changes.", false)
+    }
+
+    func categorizeExperiment(name: String, info: String) async throws -> String {
+        let url = URL(string: "\(baseURL)?key=\(apiKey)")!
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let prompt = """
+        Categorize this psychology experiment into ONE of these categories:
+        - social (social psychology, group dynamics)
+        - cognitive (thinking, decision making)
+        - developmental (child development, aging)
+        - behavioral (conditioning, behavior modification)
+        - emotional (emotions, affect)
+        - memory (memory, recall)
+        - perception (sensory, attention)
+        - learning (education, skill acquisition)
+        - obedience (authority, compliance)
+        - conformity (social pressure, norms)
+        - attachment (bonding, relationships)
+        - aggression (violence, hostility)
+        - motivation (goals, drives)
+        - stress (anxiety, coping)
+
+        Experiment: "\(name)"
+        Description: "\(info)"
+
+        Respond with ONLY the category name, nothing else.
+        """
+
+        let body: [String: Any] = [
+            "contents": [
+                [
+                    "parts": [
+                        ["text": prompt]
+                    ]
+                ]
+            ]
+        ]
+
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, _) = try await URLSession.shared.data(for: request)
+
+        let response = try JSONDecoder().decode(GeminiResponse.self, from: data)
+
+        if let text = response.candidates?.first?.content?.parts?.first?.text {
+            let category = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            print("🔵 Categorized experiment '\(name)' as: \(category)")
+            return category
+        }
+
+        return "default"
+    }
+
+    // MARK: - Animation Generation
+
+    /// Generate a storyboard of 10 scene descriptions for an experiment animation
+    func generateExperimentStoryboard(experiment: Experiment) async throws -> [String] {
+        let url = URL(string: "\(baseURL)?key=\(apiKey)")!
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let prompt = """
+        Given this psychology experiment:
+        Name: \(experiment.name)
+        Description: \(experiment.info)
+        Researchers: \(experiment.researchers)
+        Year: \(experiment.date)
+
+        Create a 10-scene storyboard for a 20-second animation showing this experiment.
+        Each scene should be a single frame description that:
+        - Uses colorful stick figures (researchers in blue coats, participants in green)
+        - Shows specific actions and poses (standing, sitting, pointing, reacting)
+        - Includes relevant props, costumes, or devices used in the experiment
+        - Has a simple colored background appropriate to the setting (lab, room, outdoors)
+        - Tells the story of what happened in the experiment sequentially
+
+        Respond ONLY with a valid JSON array of 10 scene descriptions (no markdown, no code blocks):
+        ["Scene 1 description", "Scene 2 description", ..., "Scene 10 description"]
+        """
+
+        let body: [String: Any] = [
+            "contents": [
+                [
+                    "parts": [
+                        ["text": prompt]
+                    ]
+                ]
+            ]
+        ]
+
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, _) = try await URLSession.shared.data(for: request)
+
+        let response = try JSONDecoder().decode(GeminiResponse.self, from: data)
+
+        if let text = response.candidates?.first?.content?.parts?.first?.text {
+            let cleaned = text
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .replacingOccurrences(of: "```json", with: "")
+                .replacingOccurrences(of: "```", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+
+            if let jsonData = cleaned.data(using: .utf8) {
+                let scenes = try JSONDecoder().decode([String].self, from: jsonData)
+                print("🟢 Generated \(scenes.count) scene descriptions")
+                return scenes
+            }
+        }
+
+        // Fallback: generate generic scenes
+        return generateFallbackStoryboard(experiment: experiment)
+    }
+
+    /// Generate an image for a scene description using Imagen 3
+    func generateSceneImage(description: String, experimentName: String) async throws -> UIImage {
+        let url = URL(string: "\(imagenURL)?key=\(apiKey)")!
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let imagePrompt = """
+        Create a simple, colorful cartoon illustration showing:
+        \(description)
+
+        Style requirements:
+        - Simple stick figure characters with colored bodies (not just black lines)
+        - Researchers wear blue, participants wear green
+        - Bright, cheerful colors
+        - Clean white or light colored background
+        - Simple shapes and clear composition
+        - Suitable for animation frame
+        - No text or labels in the image
+        """
+
+        let body: [String: Any] = [
+            "instances": [
+                ["prompt": imagePrompt]
+            ],
+            "parameters": [
+                "sampleCount": 1,
+                "aspectRatio": "1:1",
+                "safetyFilterLevel": "block_few"
+            ]
+        ]
+
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        if let httpResponse = response as? HTTPURLResponse {
+            print("🔵 Imagen API Status Code: \(httpResponse.statusCode)")
+        }
+
+        // Parse Imagen response
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let predictions = json["predictions"] as? [[String: Any]],
+           let firstPrediction = predictions.first,
+           let bytesBase64 = firstPrediction["bytesBase64Encoded"] as? String,
+           let imageData = Data(base64Encoded: bytesBase64),
+           let image = UIImage(data: imageData) {
+            print("🟢 Successfully generated image")
+            return image
+        }
+
+        // If Imagen fails, try generating with Gemini's native image generation
+        print("🟡 Imagen failed, trying fallback image generation")
+        return try await generateFallbackImage(description: description)
+    }
+
+    /// Fallback image generation using a placeholder
+    private func generateFallbackImage(description: String) async throws -> UIImage {
+        // Create a simple colored placeholder image
+        let size = CGSize(width: 512, height: 512)
+        let renderer = UIGraphicsImageRenderer(size: size)
+
+        let image = renderer.image { context in
+            // Background
+            UIColor.systemGray6.setFill()
+            context.fill(CGRect(origin: .zero, size: size))
+
+            // Draw simple stick figures
+            let figureColor = UIColor.systemBlue
+            figureColor.setStroke()
+
+            let path = UIBezierPath()
+            // Simple stick figure
+            let centerX = size.width / 2
+            let centerY = size.height / 2
+
+            // Head
+            path.move(to: CGPoint(x: centerX, y: centerY - 60))
+            path.addArc(withCenter: CGPoint(x: centerX, y: centerY - 80), radius: 20, startAngle: 0, endAngle: .pi * 2, clockwise: true)
+
+            // Body
+            path.move(to: CGPoint(x: centerX, y: centerY - 60))
+            path.addLine(to: CGPoint(x: centerX, y: centerY + 20))
+
+            // Arms
+            path.move(to: CGPoint(x: centerX - 40, y: centerY - 20))
+            path.addLine(to: CGPoint(x: centerX + 40, y: centerY - 20))
+
+            // Legs
+            path.move(to: CGPoint(x: centerX, y: centerY + 20))
+            path.addLine(to: CGPoint(x: centerX - 30, y: centerY + 80))
+            path.move(to: CGPoint(x: centerX, y: centerY + 20))
+            path.addLine(to: CGPoint(x: centerX + 30, y: centerY + 80))
+
+            path.lineWidth = 4
+            path.stroke()
+        }
+
+        return image
+    }
+
+    /// Generate fallback storyboard if API fails
+    private func generateFallbackStoryboard(experiment: Experiment) -> [String] {
+        return [
+            "A researcher in a blue coat stands in a laboratory setting, clipboard in hand",
+            "Participants in green arrive and are greeted by the researcher",
+            "The researcher explains the experiment procedure to the participants",
+            "Participants begin the experimental task",
+            "A participant shows concentration while performing the task",
+            "The researcher observes and takes notes",
+            "Participants interact with experimental materials or each other",
+            "A key moment in the experiment occurs",
+            "Participants react to the experimental condition",
+            "The experiment concludes with the researcher thanking participants"
+        ]
     }
 
     private func getRandomFallbackExperiment(excludingNames: [String]) -> Experiment {

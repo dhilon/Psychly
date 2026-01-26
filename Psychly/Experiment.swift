@@ -14,4 +14,10 @@ struct Experiment: Codable {
     let researchers: String
     let hypothesis: String
     let rejected: Bool
+    var badgeIcon: String?
+    var badgeCategory: String?
+
+    var displayBadgeIcon: String {
+        badgeIcon ?? "flask.fill"
+    }
 }

@@ -10,6 +10,7 @@
 		BCF932E82F2165A0004108C2 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = BCF932E72F2165A0004108C2 /* FirebaseAuth */; };
 		BCF932EA2F2165A0004108C2 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = BCF932E92F2165A0004108C2 /* FirebaseCore */; };
 		BCF932F12F240D6B004108C2 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = BCF932F02F240D6B004108C2 /* FirebaseFirestore */; };
+		BCF933082F2802F2004108C2 /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = BCF933072F2802F2004108C2 /* FirebaseStorage */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -59,6 +60,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				BCF932EA2F2165A0004108C2 /* FirebaseCore in Frameworks */,
+				BCF933082F2802F2004108C2 /* FirebaseStorage in Frameworks */,
 				BCF932E82F2165A0004108C2 /* FirebaseAuth in Frameworks */,
 				BCF932F12F240D6B004108C2 /* FirebaseFirestore in Frameworks */,
 			);
@@ -87,6 +89,7 @@
 				BC2AE5FA2F20012100AB9B0A /* Psychly */,
 				BC2AE6082F20012400AB9B0A /* PsychlyTests */,
 				BC2AE6122F20012400AB9B0A /* PsychlyUITests */,
+				BCF933062F2802F2004108C2 /* Frameworks */,
 				BC2AE5F92F20012100AB9B0A /* Products */,
 			);
 			sourceTree = "<group>";
@@ -99,6 +102,13 @@
 				BC2AE60F2F20012400AB9B0A /* PsychlyUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		BCF933062F2802F2004108C2 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -124,6 +134,7 @@
 				BCF932E72F2165A0004108C2 /* FirebaseAuth */,
 				BCF932E92F2165A0004108C2 /* FirebaseCore */,
 				BCF932F02F240D6B004108C2 /* FirebaseFirestore */,
+				BCF933072F2802F2004108C2 /* FirebaseStorage */,
 			);
 			productName = Psychly;
 			productReference = BC2AE5F82F20012100AB9B0A /* Psychly.app */;
@@ -602,6 +613,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = BCF932E42F200B6B004108C2 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseFirestore;
+		};
+		BCF933072F2802F2004108C2 /* FirebaseStorage */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BCF932E42F200B6B004108C2 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseStorage;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

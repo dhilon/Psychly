@@ -9,15 +9,26 @@ import SwiftUI
 
 struct ExperimentView: View {
     let date: Date
-    @StateObject private var voteManager = VoteManager()
     @StateObject private var experimentManager = ExperimentManager()
     @StateObject private var userStatsManager = UserStatsManager()
     @State private var showHint = false
     @State private var userGuess = ""
-    @State private var hasSubmittedGuess = false
     @State private var isCheckingGuess = false
-    @State private var guessWasCorrect: Bool? = nil
     @State private var incorrectReasoning: String? = nil
+    @State private var statsLoaded = false
+
+    // Computed properties from persisted state
+    private var hasSubmittedGuess: Bool {
+        userStatsManager.hasAnswered(for: date)
+    }
+
+    private var guessWasCorrect: Bool? {
+        userStatsManager.getAnswer(for: date)?.correct
+    }
+
+    private var previousGuess: String? {
+        userStatsManager.getAnswer(for: date)?.guess
+    }
 
     private var isToday: Bool {
         let calendar = Calendar.current
@@ -113,58 +124,24 @@ struct ExperimentView: View {
                                 .font(.system(.subheadline, design: .rounded))
                                 .fontWeight(.semibold)
 
-                            TextField("Enter your guess...", text: $userGuess)
-                                .font(.system(.body, design: .rounded))
-                                .textFieldStyle(.roundedBorder)
-                                .disabled(hasSubmittedGuess)
-
-                            if !hasSubmittedGuess {
-                                Button {
-                                    Task {
-                                        isCheckingGuess = true
-                                        do {
-                                            let result = try await GeminiService.shared.checkGuess(
-                                                userGuess: userGuess,
-                                                actualName: experiment.name
-                                            )
-                                            guessWasCorrect = result.isCorrect
-                                            incorrectReasoning = result.reasoning
-                                            if !result.isCorrect {
-                                                print("🔴 Incorrect guess. Reasoning: \(result.reasoning ?? "No reasoning provided")")
-                                            }
-                                        } catch {
-                                            print("🔴 Error checking guess: \(error)")
-                                            guessWasCorrect = false
-                                        }
-                                        isCheckingGuess = false
-                                        withAnimation {
-                                            hasSubmittedGuess = true
-                                        }
-                                        // Record view and update stats when guess is submitted
-                                        await userStatsManager.recordView(for: date)
-                                    }
-                                } label: {
-                                    if isCheckingGuess {
-                                        ProgressView()
-                                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                            .frame(maxWidth: .infinity)
-                                            .padding()
-                                            .background(Color.purple)
-                                            .cornerRadius(12)
-                                    } else {
-                                        Text("Submit Guess")
-                                            .font(.system(.body, design: .rounded))
-                                            .fontWeight(.semibold)
-                                            .foregroundStyle(.white)
-                                            .frame(maxWidth: .infinity)
-                                            .padding()
-                                            .background(userGuess.isEmpty ? Color.gray : Color.purple)
-                                            .cornerRadius(12)
-                                    }
+                            if !statsLoaded {
+                                // Loading state while checking if user already answered
+                                ProgressView()
+                                    .frame(maxWidth: .infinity)
+                                    .padding()
+                            } else if hasSubmittedGuess {
+                                // User already answered - show their guess
+                                if let guess = previousGuess {
+                                    Text("Your guess: \(guess)")
+                                        .font(.system(.body, design: .rounded))
+                                        .foregroundStyle(.secondary)
+                                        .padding()
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .background(Color(.systemGray6))
+                                        .cornerRadius(8)
                                 }
-                                .disabled(userGuess.isEmpty || isCheckingGuess)
-                            } else {
-                                // Show the result after guessing
+
+                                // Show the result
                                 VStack(alignment: .leading, spacing: 12) {
                                     // Correct/Incorrect feedback
                                     HStack {
@@ -202,6 +179,54 @@ struct ExperimentView: View {
                                 .padding()
                                 .background(Color(.systemGray6))
                                 .cornerRadius(12)
+                            } else {
+                                // User hasn't answered yet - show input
+                                TextField("Enter your guess...", text: $userGuess)
+                                    .font(.system(.body, design: .rounded))
+                                    .textFieldStyle(.roundedBorder)
+
+                                Button {
+                                    Task {
+                                        isCheckingGuess = true
+                                        var isCorrect = false
+                                        do {
+                                            let result = try await GeminiService.shared.checkGuess(
+                                                userGuess: userGuess,
+                                                actualName: experiment.name
+                                            )
+                                            isCorrect = result.isCorrect
+                                            incorrectReasoning = result.reasoning
+                                            if !result.isCorrect {
+                                                print("🔴 Incorrect guess. Reasoning: \(result.reasoning ?? "No reasoning provided")")
+                                            }
+                                        } catch {
+                                            print("🔴 Error checking guess: \(error)")
+                                            isCorrect = false
+                                        }
+                                        // Record answer (persists the result)
+                                        await userStatsManager.recordAnswer(for: date, correct: isCorrect, guess: userGuess)
+                                        isCheckingGuess = false
+                                    }
+                                } label: {
+                                    if isCheckingGuess {
+                                        ProgressView()
+                                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                            .frame(maxWidth: .infinity)
+                                            .padding()
+                                            .background(Color.purple)
+                                            .cornerRadius(12)
+                                    } else {
+                                        Text("Submit Guess")
+                                            .font(.system(.body, design: .rounded))
+                                            .fontWeight(.semibold)
+                                            .foregroundStyle(.white)
+                                            .frame(maxWidth: .infinity)
+                                            .padding()
+                                            .background(userGuess.isEmpty ? Color.gray : Color.purple)
+                                            .cornerRadius(12)
+                                    }
+                                }
+                                .disabled(userGuess.isEmpty || isCheckingGuess)
                             }
                         }
                         .padding(.horizontal, 24)
@@ -209,7 +234,7 @@ struct ExperimentView: View {
 
                     // Video button (and Hint button only for today)
                     HStack(spacing: 12) {
-                        NavigationLink(destination: VideoView()) {
+                        NavigationLink(destination: VideoView(date: date)) {
                             HStack {
                                 Image(systemName: "play.circle.fill")
                                 Text("Video")
@@ -286,56 +311,6 @@ struct ExperimentView: View {
                     .padding(.top, 40)
                 }
 
-                // Like and Dislike buttons (only show if experiment exists)
-                if experimentManager.experiment != nil {
-                    HStack(spacing: 40) {
-                        VStack(spacing: 8) {
-                            Button {
-                                Task {
-                                    let newVote = voteManager.userVote == "dislike" ? nil : "dislike"
-                                    await voteManager.vote(for: date, voteType: newVote)
-                                }
-                            } label: {
-                                Image(systemName: "hand.thumbsdown.fill")
-                                    .font(.system(size: 32))
-                                    .foregroundStyle(voteManager.userVote == "dislike" ? .gray : .red.opacity(0.8))
-                                    .frame(width: 70, height: 70)
-                                    .background(voteManager.userVote == "dislike" ? Color.purple : Color(.systemGray6))
-                                    .cornerRadius(35)
-                            }
-                            .disabled(voteManager.isLoading)
-
-                            Text("\(voteManager.dislikeCount)")
-                                .font(.system(.subheadline, design: .rounded))
-                                .fontWeight(.medium)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        VStack(spacing: 8) {
-                            Button {
-                                Task {
-                                    let newVote = voteManager.userVote == "like" ? nil : "like"
-                                    await voteManager.vote(for: date, voteType: newVote)
-                                }
-                            } label: {
-                                Image(systemName: "hand.thumbsup.fill")
-                                    .font(.system(size: 32))
-                                    .foregroundStyle(voteManager.userVote == "like" ? .gray : .green.opacity(0.8))
-                                    .frame(width: 70, height: 70)
-                                    .background(voteManager.userVote == "like" ? Color.purple : Color(.systemGray6))
-                                    .cornerRadius(35)
-                            }
-                            .disabled(voteManager.isLoading)
-
-                            Text("\(voteManager.likeCount)")
-                                .font(.system(.subheadline, design: .rounded))
-                                .fontWeight(.medium)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding(.top, 8)
-                }
-
                 Spacer()
             }
         }
@@ -343,8 +318,8 @@ struct ExperimentView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await experimentManager.loadExperiment(for: date)
-            await voteManager.loadVotes(for: date)
             await userStatsManager.loadStats()
+            statsLoaded = true
         }
     }
 }
