@@ -32,6 +32,11 @@ class UserStatsManager: ObservableObject {
     @Published var answers: [String: UserAnswer] = [:]
     @Published var isLoading = false
 
+    /// Returns array of date strings where the user answered correctly
+    var correctAnswerDates: [String] {
+        answers.filter { $0.value.correct }.map { $0.key }.sorted { $0 > $1 }
+    }
+
     private let db = Firestore.firestore()
 
     private func dateString(from date: Date) -> String {

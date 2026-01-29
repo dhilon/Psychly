@@ -42,6 +42,28 @@ struct ProfileView: View {
                 .padding(.horizontal, 24)
                 .padding(.top, 16)
 
+                // Badges button
+                NavigationLink {
+                    BadgesView(correctDates: userStatsManager.correctAnswerDates)
+                } label: {
+                    HStack {
+                        Image(systemName: "star.circle.fill")
+                            .foregroundStyle(.yellow)
+                        Text("Badges")
+                            .fontWeight(.semibold)
+                        Spacer()
+                        Text("\(userStatsManager.correctAnswerDates.count)")
+                            .foregroundStyle(.secondary)
+                        Image(systemName: "chevron.right")
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding()
+                    .background(Color(.systemGray6))
+                    .cornerRadius(10)
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 8)
+
                 Spacer()
 
                 // Logout button
