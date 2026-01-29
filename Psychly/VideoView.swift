@@ -15,6 +15,8 @@ struct VideoView: View {
     @State private var frames: [UIImage] = []
     @State private var isLoadingAnimation = true
     @State private var animationFailed = false
+    @State private var generationProgress: Int = 0
+    @State private var totalFrames: Int = 50
 
     private var dateString: String {
         let formatter = DateFormatter()
@@ -32,9 +34,18 @@ struct VideoView: View {
                 VStack(spacing: 16) {
                     ProgressView()
                         .scaleEffect(1.5)
-                    Text("Generating animation...")
-                        .font(.system(.subheadline, design: .rounded))
-                        .foregroundStyle(.secondary)
+                    if generationProgress > 0 {
+                        Text("Generating frame \(generationProgress)/\(totalFrames)...")
+                            .font(.system(.subheadline, design: .rounded))
+                            .foregroundStyle(.secondary)
+                        ProgressView(value: Double(generationProgress), total: Double(totalFrames))
+                            .progressViewStyle(.linear)
+                            .frame(width: 200)
+                    } else {
+                        Text("Loading animation...")
+                            .font(.system(.subheadline, design: .rounded))
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .frame(height: 300)
                 .frame(maxWidth: .infinity)
@@ -121,22 +132,37 @@ struct VideoView: View {
         }
 
         // 2. Check cache first
-        if let cached = await GIFGenerationService.shared.getCachedFrames(experimentDate: dateString) {
+        if let cached = await GIFGenerationService.shared.getCachedFrames(
+            experimentDate: dateString,
+            experimentName: experiment.name
+        ) {
             print("🟢 Using cached frames")
             frames = cached
             isLoadingAnimation = false
             return
         }
 
-        // 3. Generate new frames
+        // 3. Generate new frames with progress updates
         do {
-            print("🔵 Generating new frames for: \(experiment.name)")
-            let generatedFrames = try await GIFGenerationService.shared.generateExperimentFrames(experiment: experiment)
+            print("🔵 Generating 50 frames for: \(experiment.name)")
+            let generatedFrames = try await GIFGenerationService.shared.generateExperimentFrames(
+                experiment: experiment,
+                onProgress: { current, total in
+                    Task { @MainActor in
+                        generationProgress = current
+                        totalFrames = total
+                    }
+                }
+            )
             frames = generatedFrames
 
             // 4. Cache frames for future use
             do {
-                try await GIFGenerationService.shared.cacheFrames(frames: generatedFrames, experimentDate: dateString)
+                try await GIFGenerationService.shared.cacheFrames(
+                    frames: generatedFrames,
+                    experimentDate: dateString,
+                    experimentName: experiment.name
+                )
             } catch {
                 print("🟡 Failed to cache frames: \(error.localizedDescription)")
             }

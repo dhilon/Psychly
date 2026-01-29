@@ -13,7 +13,6 @@ class GeminiService {
 
     private let apiKey: String
     private let baseURL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
-    private let imagenURL = "https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict"
 
     private init() {
         // Load API key from Secrets.plist
@@ -314,8 +313,8 @@ class GeminiService {
 
     // MARK: - Animation Generation
 
-    /// Generate a storyboard of 10 scene descriptions for an experiment animation
-    func generateExperimentStoryboard(experiment: Experiment) async throws -> [String] {
+    /// Generate a storyboard of 50 frame descriptions for a flipbook-style animation
+    func generate50FrameStoryboard(experiment: Experiment) async throws -> [String] {
         let url = URL(string: "\(baseURL)?key=\(apiKey)")!
 
         var request = URLRequest(url: url)
@@ -329,16 +328,24 @@ class GeminiService {
         Researchers: \(experiment.researchers)
         Year: \(experiment.date)
 
-        Create a 10-scene storyboard for a 20-second animation showing this experiment.
-        Each scene should be a single frame description that:
-        - Uses colorful stick figures (researchers in blue coats, participants in green)
-        - Shows specific actions and poses (standing, sitting, pointing, reacting)
-        - Includes relevant props, costumes, or devices used in the experiment
-        - Has a simple colored background appropriate to the setting (lab, room, outdoors)
-        - Tells the story of what happened in the experiment sequentially
+        Create a 50-frame storyboard for a 25-second flipbook animation (0.5 seconds per frame) showing this experiment.
 
-        Respond ONLY with a valid JSON array of 10 scene descriptions (no markdown, no code blocks):
-        ["Scene 1 description", "Scene 2 description", ..., "Scene 10 description"]
+        Structure the animation in 3 acts:
+        - Act 1 (Frames 1-15): SETUP - Show the lab/room environment, researcher enters, participant arrives and is greeted
+        - Act 2 (Frames 16-35): EXPERIMENT - Show the actual procedure, key moments, participant reactions, researcher observations
+        - Act 3 (Frames 36-50): CONCLUSION - Show results revealed, debriefing conversation, participants departing
+
+        Each frame description must include:
+        - Character positions (left/center/right, distance from edge as percentage)
+        - Character poses (standing, sitting, pointing, arms up, leaning, etc.)
+        - Small motion changes from previous frame (for flipbook effect)
+        - Props visible in scene (clipboard, table, chair, equipment specific to the experiment)
+        - Brief action description
+
+        Keep descriptions concise but specific for programmatic rendering.
+
+        Respond ONLY with a valid JSON array of exactly 50 frame descriptions (no markdown, no code blocks):
+        ["Frame 1: ...", "Frame 2: ...", ..., "Frame 50: ..."]
         """
 
         let body: [String: Any] = [
@@ -366,131 +373,370 @@ class GeminiService {
 
             if let jsonData = cleaned.data(using: .utf8) {
                 let scenes = try JSONDecoder().decode([String].self, from: jsonData)
-                print("🟢 Generated \(scenes.count) scene descriptions")
+                print("🟢 Generated \(scenes.count) frame descriptions")
                 return scenes
             }
         }
 
-        // Fallback: generate generic scenes
-        return generateFallbackStoryboard(experiment: experiment)
+        // Fallback: generate 50 generic frames
+        return generate50FrameFallbackStoryboard(experiment: experiment)
     }
 
-    /// Generate an image for a scene description using Imagen 3
-    func generateSceneImage(description: String, experimentName: String) async throws -> UIImage {
-        let url = URL(string: "\(imagenURL)?key=\(apiKey)")!
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        let imagePrompt = """
-        Create a simple, colorful cartoon illustration showing:
-        \(description)
-
-        Style requirements:
-        - Simple stick figure characters with colored bodies (not just black lines)
-        - Researchers wear blue, participants wear green
-        - Bright, cheerful colors
-        - Clean white or light colored background
-        - Simple shapes and clear composition
-        - Suitable for animation frame
-        - No text or labels in the image
-        """
-
-        let body: [String: Any] = [
-            "instances": [
-                ["prompt": imagePrompt]
-            ],
-            "parameters": [
-                "sampleCount": 1,
-                "aspectRatio": "1:1",
-                "safetyFilterLevel": "block_few"
-            ]
-        ]
-
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        if let httpResponse = response as? HTTPURLResponse {
-            print("🔵 Imagen API Status Code: \(httpResponse.statusCode)")
-        }
-
-        // Parse Imagen response
-        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let predictions = json["predictions"] as? [[String: Any]],
-           let firstPrediction = predictions.first,
-           let bytesBase64 = firstPrediction["bytesBase64Encoded"] as? String,
-           let imageData = Data(base64Encoded: bytesBase64),
-           let image = UIImage(data: imageData) {
-            print("🟢 Successfully generated image")
-            return image
-        }
-
-        // If Imagen fails, try generating with Gemini's native image generation
-        print("🟡 Imagen failed, trying fallback image generation")
-        return try await generateFallbackImage(description: description)
+    /// Legacy method - now calls generate50FrameStoryboard
+    func generateExperimentStoryboard(experiment: Experiment) async throws -> [String] {
+        return try await generate50FrameStoryboard(experiment: experiment)
     }
 
-    /// Fallback image generation using a placeholder
-    private func generateFallbackImage(description: String) async throws -> UIImage {
-        // Create a simple colored placeholder image
+    /// Generate an image for a scene description with detailed styling
+    func generateSceneImage(description: String, experimentName: String, frameIndex: Int = 0) async throws -> UIImage {
+        print("🔵 Generating frame \(frameIndex + 1) for: \(description.prefix(40))...")
+        return generateFlipbookFrame(description: description, frameIndex: frameIndex)
+    }
+
+    /// Generate a flipbook frame with consistent styling
+    /// - Blue oval body (#3B82F6) for researcher
+    /// - Green oval body (#22C55E) for participant
+    /// - Light gray background (#F0F0F0)
+    /// - 512x512 canvas, 4px line thickness
+    /// - Characters ~150 pixels tall
+    private func generateFlipbookFrame(description: String, frameIndex: Int) -> UIImage {
         let size = CGSize(width: 512, height: 512)
         let renderer = UIGraphicsImageRenderer(size: size)
 
+        // Consistent colors per spec
+        let backgroundColor = UIColor(red: 240/255, green: 240/255, blue: 240/255, alpha: 1.0) // #F0F0F0
+        let researcherColor = UIColor(red: 59/255, green: 130/255, blue: 246/255, alpha: 1.0) // #3B82F6
+        let participantColor = UIColor(red: 34/255, green: 197/255, blue: 94/255, alpha: 1.0) // #22C55E
+
+        // Parse description for positioning and actions
+        let desc = description.lowercased()
+        let isGroupScene = desc.contains("group") || desc.contains("participants") || desc.contains("multiple")
+        let hasInteraction = desc.contains("interact") || desc.contains("talk") || desc.contains("speak") || desc.contains("explain")
+        let isObserving = desc.contains("observ") || desc.contains("watch") || desc.contains("note")
+        let isSitting = desc.contains("sit") || desc.contains("seated") || desc.contains("chair")
+        let isPointing = desc.contains("point") || desc.contains("gesture") || desc.contains("show")
+        let hasTable = desc.contains("table") || desc.contains("desk")
+        let hasChair = desc.contains("chair") || desc.contains("seated")
+        let isEntering = desc.contains("enter") || desc.contains("arrive") || desc.contains("walk")
+        let isLeaving = desc.contains("leave") || desc.contains("depart") || desc.contains("exit")
+
+        // Calculate positions based on frame index for subtle animation
+        let frameOffset = CGFloat(frameIndex % 5) * 2 // Small oscillation for flipbook effect
+        let breathingOffset = sin(CGFloat(frameIndex) * 0.3) * 3 // Subtle breathing motion
+
+        // Base positions
+        var researcherX = size.width * 0.25
+        var participantX = size.width * 0.7
+
+        // Adjust positions based on scene
+        if isEntering {
+            participantX = size.width * (0.85 - CGFloat(frameIndex % 15) * 0.01)
+        } else if isLeaving {
+            participantX = size.width * (0.7 + CGFloat(frameIndex % 15) * 0.01)
+        }
+
+        if hasInteraction {
+            researcherX = size.width * 0.35
+            participantX = size.width * 0.65
+        }
+
         let image = renderer.image { context in
-            // Background
-            UIColor.systemGray6.setFill()
+            let ctx = context.cgContext
+
+            // Light gray background
+            backgroundColor.setFill()
             context.fill(CGRect(origin: .zero, size: size))
 
-            // Draw simple stick figures
-            let figureColor = UIColor.systemBlue
-            figureColor.setStroke()
+            // Draw floor line
+            UIColor.systemGray4.setStroke()
+            ctx.setLineWidth(2)
+            ctx.move(to: CGPoint(x: 0, y: size.height * 0.78))
+            ctx.addLine(to: CGPoint(x: size.width, y: size.height * 0.78))
+            ctx.strokePath()
 
-            let path = UIBezierPath()
-            // Simple stick figure
-            let centerX = size.width / 2
-            let centerY = size.height / 2
+            // Draw props first (behind characters)
+            if hasTable {
+                drawTable(context: ctx, x: size.width * 0.5, y: size.height * 0.65, width: 120, height: 35)
+            }
 
-            // Head
-            path.move(to: CGPoint(x: centerX, y: centerY - 60))
-            path.addArc(withCenter: CGPoint(x: centerX, y: centerY - 80), radius: 20, startAngle: 0, endAngle: .pi * 2, clockwise: true)
+            if hasChair {
+                drawChair(context: ctx, x: participantX - 15, y: size.height * 0.6)
+            }
 
-            // Body
-            path.move(to: CGPoint(x: centerX, y: centerY - 60))
-            path.addLine(to: CGPoint(x: centerX, y: centerY + 20))
+            // Determine arm positions
+            let researcherArm: ArmPosition = isObserving ? .crossed : (isPointing ? .pointing : .down)
+            let participantArm: ArmPosition = hasInteraction ? .up : (isSitting ? .onLap : .down)
 
-            // Arms
-            path.move(to: CGPoint(x: centerX - 40, y: centerY - 20))
-            path.addLine(to: CGPoint(x: centerX + 40, y: centerY - 20))
+            // Draw researcher (left side, blue)
+            drawStickFigure(
+                context: ctx,
+                centerX: researcherX + frameOffset,
+                baseY: size.height * 0.78,
+                color: researcherColor,
+                hasClipboard: true,
+                armPosition: researcherArm,
+                isSitting: false,
+                breathingOffset: breathingOffset
+            )
 
-            // Legs
-            path.move(to: CGPoint(x: centerX, y: centerY + 20))
-            path.addLine(to: CGPoint(x: centerX - 30, y: centerY + 80))
-            path.move(to: CGPoint(x: centerX, y: centerY + 20))
-            path.addLine(to: CGPoint(x: centerX + 30, y: centerY + 80))
-
-            path.lineWidth = 4
-            path.stroke()
+            // Draw participant(s) (right side, green)
+            if isGroupScene {
+                // Multiple participants
+                drawStickFigure(
+                    context: ctx,
+                    centerX: participantX - 40 + frameOffset,
+                    baseY: size.height * 0.78,
+                    color: participantColor,
+                    hasClipboard: false,
+                    armPosition: participantArm,
+                    isSitting: isSitting,
+                    breathingOffset: breathingOffset
+                )
+                drawStickFigure(
+                    context: ctx,
+                    centerX: participantX + 40 - frameOffset,
+                    baseY: size.height * 0.78,
+                    color: participantColor.withAlphaComponent(0.85),
+                    hasClipboard: false,
+                    armPosition: .down,
+                    isSitting: isSitting,
+                    breathingOffset: -breathingOffset
+                )
+            } else {
+                // Single participant
+                drawStickFigure(
+                    context: ctx,
+                    centerX: participantX + frameOffset,
+                    baseY: size.height * 0.78,
+                    color: participantColor,
+                    hasClipboard: false,
+                    armPosition: participantArm,
+                    isSitting: isSitting,
+                    breathingOffset: breathingOffset
+                )
+            }
         }
 
         return image
     }
 
-    /// Generate fallback storyboard if API fails
+    private enum ArmPosition {
+        case up, down, crossed, pointing, onLap
+    }
+
+    /// Draw a stick figure with oval body, ~150 pixels tall, 4px line thickness
+    private func drawStickFigure(context: CGContext, centerX: CGFloat, baseY: CGFloat, color: UIColor, hasClipboard: Bool, armPosition: ArmPosition, isSitting: Bool, breathingOffset: CGFloat) {
+        // Character height ~150 pixels
+        let headRadius: CGFloat = 18
+        let bodyHeight: CGFloat = 50
+        let bodyWidth: CGFloat = 30
+        let limbLength: CGFloat = 45
+        let lineWidth: CGFloat = 4
+
+        // Adjust base Y for sitting
+        let adjustedBaseY = isSitting ? baseY - 20 : baseY
+
+        // Calculate positions
+        let headCenterY = adjustedBaseY - limbLength - bodyHeight - headRadius + breathingOffset
+        let bodyTopY = headCenterY + headRadius
+        let bodyBottomY = bodyTopY + bodyHeight
+
+        context.setLineWidth(lineWidth)
+        context.setLineCap(.round)
+        context.setLineJoin(.round)
+
+        // Head (filled circle)
+        context.setFillColor(color.cgColor)
+        context.fillEllipse(in: CGRect(
+            x: centerX - headRadius,
+            y: headCenterY - headRadius,
+            width: headRadius * 2,
+            height: headRadius * 2
+        ))
+
+        // Body (oval)
+        context.setFillColor(color.cgColor)
+        context.fillEllipse(in: CGRect(
+            x: centerX - bodyWidth / 2,
+            y: bodyTopY,
+            width: bodyWidth,
+            height: bodyHeight
+        ))
+
+        // Arms
+        context.setStrokeColor(color.cgColor)
+        let armY = bodyTopY + 15
+
+        switch armPosition {
+        case .up:
+            context.move(to: CGPoint(x: centerX - bodyWidth/2, y: armY))
+            context.addLine(to: CGPoint(x: centerX - limbLength * 0.8, y: armY - 25))
+            context.move(to: CGPoint(x: centerX + bodyWidth/2, y: armY))
+            context.addLine(to: CGPoint(x: centerX + limbLength * 0.8, y: armY - 25))
+        case .crossed:
+            context.move(to: CGPoint(x: centerX - bodyWidth/2, y: armY))
+            context.addLine(to: CGPoint(x: centerX + 10, y: armY + 20))
+            context.move(to: CGPoint(x: centerX + bodyWidth/2, y: armY))
+            context.addLine(to: CGPoint(x: centerX - 10, y: armY + 20))
+        case .pointing:
+            context.move(to: CGPoint(x: centerX - bodyWidth/2, y: armY))
+            context.addLine(to: CGPoint(x: centerX - limbLength * 0.6, y: armY + 15))
+            context.move(to: CGPoint(x: centerX + bodyWidth/2, y: armY))
+            context.addLine(to: CGPoint(x: centerX + limbLength, y: armY - 10))
+        case .onLap:
+            context.move(to: CGPoint(x: centerX - bodyWidth/2, y: armY))
+            context.addLine(to: CGPoint(x: centerX - 15, y: bodyBottomY + 5))
+            context.move(to: CGPoint(x: centerX + bodyWidth/2, y: armY))
+            context.addLine(to: CGPoint(x: centerX + 15, y: bodyBottomY + 5))
+        case .down:
+            context.move(to: CGPoint(x: centerX - bodyWidth/2, y: armY))
+            context.addLine(to: CGPoint(x: centerX - limbLength * 0.5, y: armY + 35))
+            context.move(to: CGPoint(x: centerX + bodyWidth/2, y: armY))
+            context.addLine(to: CGPoint(x: centerX + limbLength * 0.5, y: armY + 35))
+        }
+        context.strokePath()
+
+        // Legs
+        if isSitting {
+            // Sitting legs (bent)
+            context.move(to: CGPoint(x: centerX - 10, y: bodyBottomY))
+            context.addLine(to: CGPoint(x: centerX - 25, y: bodyBottomY + 20))
+            context.addLine(to: CGPoint(x: centerX - 25, y: baseY))
+            context.move(to: CGPoint(x: centerX + 10, y: bodyBottomY))
+            context.addLine(to: CGPoint(x: centerX + 25, y: bodyBottomY + 20))
+            context.addLine(to: CGPoint(x: centerX + 25, y: baseY))
+        } else {
+            // Standing legs
+            context.move(to: CGPoint(x: centerX - 10, y: bodyBottomY))
+            context.addLine(to: CGPoint(x: centerX - limbLength * 0.5, y: baseY))
+            context.move(to: CGPoint(x: centerX + 10, y: bodyBottomY))
+            context.addLine(to: CGPoint(x: centerX + limbLength * 0.5, y: baseY))
+        }
+        context.strokePath()
+
+        // Clipboard for researcher
+        if hasClipboard {
+            let clipboardX = centerX + limbLength * 0.5 - 5
+            let clipboardY = armY + 30
+            context.setFillColor(UIColor.systemYellow.cgColor)
+            context.fill(CGRect(x: clipboardX, y: clipboardY, width: 18, height: 24))
+            context.setStrokeColor(UIColor.systemOrange.cgColor)
+            context.setLineWidth(2)
+            context.stroke(CGRect(x: clipboardX, y: clipboardY, width: 18, height: 24))
+            // Lines on clipboard
+            context.setStrokeColor(UIColor.systemGray.cgColor)
+            context.setLineWidth(1)
+            for i in 0..<3 {
+                let lineY = clipboardY + 6 + CGFloat(i) * 6
+                context.move(to: CGPoint(x: clipboardX + 3, y: lineY))
+                context.addLine(to: CGPoint(x: clipboardX + 15, y: lineY))
+            }
+            context.strokePath()
+        }
+    }
+
+    private func drawTable(context: CGContext, x: CGFloat, y: CGFloat, width: CGFloat, height: CGFloat) {
+        // Table top
+        context.setFillColor(UIColor(red: 139/255, green: 90/255, blue: 43/255, alpha: 1.0).cgColor)
+        context.fill(CGRect(x: x - width/2, y: y, width: width, height: height))
+
+        // Table legs
+        context.setLineWidth(8)
+        context.setStrokeColor(UIColor(red: 101/255, green: 67/255, blue: 33/255, alpha: 1.0).cgColor)
+        context.move(to: CGPoint(x: x - width/2 + 12, y: y + height))
+        context.addLine(to: CGPoint(x: x - width/2 + 12, y: y + height + 45))
+        context.move(to: CGPoint(x: x + width/2 - 12, y: y + height))
+        context.addLine(to: CGPoint(x: x + width/2 - 12, y: y + height + 45))
+        context.strokePath()
+    }
+
+    private func drawChair(context: CGContext, x: CGFloat, y: CGFloat) {
+        let chairColor = UIColor(red: 100/255, green: 100/255, blue: 100/255, alpha: 1.0)
+
+        // Seat
+        context.setFillColor(chairColor.cgColor)
+        context.fill(CGRect(x: x, y: y + 30, width: 40, height: 8))
+
+        // Back
+        context.setLineWidth(6)
+        context.setStrokeColor(chairColor.cgColor)
+        context.move(to: CGPoint(x: x, y: y))
+        context.addLine(to: CGPoint(x: x, y: y + 38))
+
+        // Legs
+        context.move(to: CGPoint(x: x + 5, y: y + 38))
+        context.addLine(to: CGPoint(x: x + 5, y: y + 70))
+        context.move(to: CGPoint(x: x + 35, y: y + 38))
+        context.addLine(to: CGPoint(x: x + 35, y: y + 70))
+        context.strokePath()
+    }
+
+    /// Generate fallback 50-frame storyboard if API fails
+    private func generate50FrameFallbackStoryboard(experiment: Experiment) -> [String] {
+        var frames: [String] = []
+
+        // Act 1: Setup (Frames 1-15)
+        frames.append("Frame 1: Empty laboratory room with table and chairs, light gray background")
+        frames.append("Frame 2: Laboratory room, researcher enters from left side at 10%")
+        frames.append("Frame 3: Researcher walking, now at 15% from left")
+        frames.append("Frame 4: Researcher at 20%, walking toward center")
+        frames.append("Frame 5: Researcher at 25%, clipboard in hand")
+        frames.append("Frame 6: Researcher standing at center-left (25%), checking clipboard")
+        frames.append("Frame 7: Researcher looking toward right side, clipboard raised")
+        frames.append("Frame 8: Participant enters from right at 90%")
+        frames.append("Frame 9: Participant walking, now at 85%")
+        frames.append("Frame 10: Participant at 80%, researcher gestures welcome")
+        frames.append("Frame 11: Participant at 75%, researcher pointing to chair")
+        frames.append("Frame 12: Participant at 70%, approaching chair near table")
+        frames.append("Frame 13: Participant sitting down on chair, researcher standing nearby")
+        frames.append("Frame 14: Participant seated, researcher explaining with gestures")
+        frames.append("Frame 15: Participant seated listening, researcher holding clipboard, talking")
+
+        // Act 2: Experiment (Frames 16-35)
+        frames.append("Frame 16: Researcher points to equipment on table, participant watches")
+        frames.append("Frame 17: Participant leans forward with interest, researcher explaining")
+        frames.append("Frame 18: Researcher demonstrates procedure, participant observing closely")
+        frames.append("Frame 19: Participant begins experimental task, researcher steps back")
+        frames.append("Frame 20: Participant focused on task, researcher taking notes")
+        frames.append("Frame 21: Participant working, researcher observing from left side")
+        frames.append("Frame 22: Participant shows concentration, slight movement")
+        frames.append("Frame 23: Researcher writes on clipboard, participant continues task")
+        frames.append("Frame 24: Key moment - participant reacts to stimulus")
+        frames.append("Frame 25: Participant shows surprise, arms slightly raised")
+        frames.append("Frame 26: Researcher notes reaction, participant processing")
+        frames.append("Frame 27: Participant continues with modified behavior")
+        frames.append("Frame 28: Researcher moves closer to observe")
+        frames.append("Frame 29: Participant shows second reaction, researcher watching intently")
+        frames.append("Frame 30: Critical experimental moment, participant engaged")
+        frames.append("Frame 31: Researcher takes detailed notes, participant focused")
+        frames.append("Frame 32: Participant shows emotional response")
+        frames.append("Frame 33: Researcher maintains neutral observation stance")
+        frames.append("Frame 34: Participant nearing completion of task")
+        frames.append("Frame 35: Task complete, participant looks to researcher")
+
+        // Act 3: Conclusion (Frames 36-50)
+        frames.append("Frame 36: Researcher approaches participant with clipboard")
+        frames.append("Frame 37: Researcher begins debriefing, gesturing while speaking")
+        frames.append("Frame 38: Participant listening to explanation, seated")
+        frames.append("Frame 39: Researcher reveals study purpose, participant reacts")
+        frames.append("Frame 40: Discussion continues, participant nods understanding")
+        frames.append("Frame 41: Researcher shows results on clipboard to participant")
+        frames.append("Frame 42: Participant examines information, leaning forward")
+        frames.append("Frame 43: Both discussing findings, interactive conversation")
+        frames.append("Frame 44: Participant stands up from chair")
+        frames.append("Frame 45: Researcher extends hand, participant shakes it")
+        frames.append("Frame 46: Participant begins walking toward exit at 75%")
+        frames.append("Frame 47: Participant at 80%, researcher waves goodbye")
+        frames.append("Frame 48: Participant at 85%, walking toward right")
+        frames.append("Frame 49: Participant at 90%, nearly exited")
+        frames.append("Frame 50: Participant exited, researcher alone writing final notes")
+
+        return frames
+    }
+
+    /// Legacy fallback method
     private func generateFallbackStoryboard(experiment: Experiment) -> [String] {
-        return [
-            "A researcher in a blue coat stands in a laboratory setting, clipboard in hand",
-            "Participants in green arrive and are greeted by the researcher",
-            "The researcher explains the experiment procedure to the participants",
-            "Participants begin the experimental task",
-            "A participant shows concentration while performing the task",
-            "The researcher observes and takes notes",
-            "Participants interact with experimental materials or each other",
-            "A key moment in the experiment occurs",
-            "Participants react to the experimental condition",
-            "The experiment concludes with the researcher thanking participants"
-        ]
+        return generate50FrameFallbackStoryboard(experiment: experiment)
     }
 
     private func getRandomFallbackExperiment(excludingNames: [String]) -> Experiment {
