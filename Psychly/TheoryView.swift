@@ -1,15 +1,15 @@
 //
-//  ExperimentView.swift
+//  TheoryView.swift
 //  Psychly
 //
-//  Created by Dhilon Prasad on 1/20/26.
+//  Created by Dhilon Prasad on 2/6/26.
 //
 
 import SwiftUI
 
-struct ExperimentView: View {
+struct TheoryView: View {
     let date: Date
-    @StateObject private var experimentManager = ExperimentManager()
+    @StateObject private var theoryManager = TheoryManager()
     @StateObject private var userStatsManager = UserStatsManager()
     @State private var showHint = false
     @State private var userGuess = ""
@@ -19,15 +19,15 @@ struct ExperimentView: View {
 
     // Computed properties from persisted state
     private var hasSubmittedGuess: Bool {
-        userStatsManager.hasAnsweredExperiment(for: date)
+        userStatsManager.hasAnsweredTheory(for: date)
     }
 
     private var guessWasCorrect: Bool? {
-        userStatsManager.getExperimentAnswer(for: date)?.correct
+        userStatsManager.getTheoryAnswer(for: date)?.correct
     }
 
     private var previousGuess: String? {
-        userStatsManager.getExperimentAnswer(for: date)?.guess
+        userStatsManager.getTheoryAnswer(for: date)?.guess
     }
 
     private var isToday: Bool {
@@ -48,66 +48,45 @@ struct ExperimentView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
-                Text("Experiment for \(formattedDate)")
+                Text("Theory for \(formattedDate)")
                     .font(.system(.title3, design: .rounded))
                     .fontWeight(.semibold)
                     .padding(.top, 24)
 
-                if experimentManager.isLoading {
-                    ProgressView("Loading experiment...")
+                if theoryManager.isLoading {
+                    ProgressView("Loading theory...")
                         .padding(.top, 40)
-                } else if let experiment = experimentManager.experiment {
-                    // Experiment info box
+                } else if let theory = theoryManager.theory {
+                    // Theory info box
                     VStack(alignment: .leading, spacing: 12) {
-                        Text(isToday ? "Mystery Experiment" : experiment.name)
+                        Text(isToday ? "Mystery Theory" : theory.name)
                             .font(.system(.headline, design: .rounded))
                             .fontWeight(.bold)
 
-                        Text(experiment.info)
+                        Text(theory.info)
                             .font(.system(.body, design: .rounded))
                             .foregroundStyle(.secondary)
-
-                        Divider()
-
-                        Text("Hypothesis")
-                            .font(.system(.caption, design: .rounded))
-                            .foregroundStyle(.secondary)
-
-                        Text(experiment.hypothesis)
-                            .font(.system(.body, design: .rounded))
-                            .italic()
-                            .foregroundStyle(.purple)
 
                         // For past dates, show all info directly
                         if !isToday {
                             Divider()
 
                             HStack {
-                                Text("Date:")
+                                Text("Year Created:")
                                     .font(.system(.subheadline, design: .rounded))
                                     .foregroundStyle(.secondary)
-                                Text(experiment.date)
+                                Text(theory.yearCreated)
                                     .font(.system(.subheadline, design: .rounded))
                                     .fontWeight(.medium)
                             }
 
                             HStack {
-                                Text("Researchers:")
+                                Text("Theorists:")
                                     .font(.system(.subheadline, design: .rounded))
                                     .foregroundStyle(.secondary)
-                                Text(experiment.researchers)
+                                Text(theory.theorists)
                                     .font(.system(.subheadline, design: .rounded))
                                     .fontWeight(.medium)
-                            }
-
-                            HStack {
-                                Text("Hypothesis was:")
-                                    .font(.system(.subheadline, design: .rounded))
-                                    .foregroundStyle(.secondary)
-                                Text(experiment.rejected ? "Rejected ✗" : "Supported ✓")
-                                    .font(.system(.subheadline, design: .rounded))
-                                    .fontWeight(.bold)
-                                    .foregroundStyle(experiment.rejected ? .red : .green)
                             }
                         }
                     }
@@ -120,7 +99,7 @@ struct ExperimentView: View {
                     // Guess input section - only for today
                     if isToday {
                         VStack(alignment: .leading, spacing: 12) {
-                            Text("What experiment is this?")
+                            Text("What theory is this?")
                                 .font(.system(.subheadline, design: .rounded))
                                 .fontWeight(.semibold)
 
@@ -160,20 +139,10 @@ struct ExperimentView: View {
                                         Text("Answer:")
                                             .font(.system(.subheadline, design: .rounded))
                                             .foregroundStyle(.secondary)
-                                        Text(experiment.name)
+                                        Text(theory.name)
                                             .font(.system(.subheadline, design: .rounded))
                                             .fontWeight(.bold)
                                             .foregroundStyle(.purple)
-                                    }
-
-                                    HStack {
-                                        Text("Hypothesis was:")
-                                            .font(.system(.subheadline, design: .rounded))
-                                            .foregroundStyle(.secondary)
-                                        Text(experiment.rejected ? "Rejected ✗" : "Supported ✓")
-                                            .font(.system(.subheadline, design: .rounded))
-                                            .fontWeight(.bold)
-                                            .foregroundStyle(experiment.rejected ? .red : .green)
                                     }
                                 }
                                 .padding()
@@ -190,9 +159,9 @@ struct ExperimentView: View {
                                         isCheckingGuess = true
                                         var isCorrect = false
                                         do {
-                                            let result = try await GeminiService.shared.checkGuess(
+                                            let result = try await GeminiService.shared.checkTheoryGuess(
                                                 userGuess: userGuess,
-                                                actualName: experiment.name
+                                                actualName: theory.name
                                             )
                                             isCorrect = result.isCorrect
                                             incorrectReasoning = result.reasoning
@@ -204,7 +173,7 @@ struct ExperimentView: View {
                                             isCorrect = false
                                         }
                                         // Record answer (persists the result)
-                                        await userStatsManager.recordExperimentAnswer(for: date, correct: isCorrect, guess: userGuess)
+                                        await userStatsManager.recordTheoryAnswer(for: date, correct: isCorrect, guess: userGuess)
                                         isCheckingGuess = false
                                     }
                                 } label: {
@@ -232,60 +201,44 @@ struct ExperimentView: View {
                         .padding(.horizontal, 24)
                     }
 
-                    // Video button (and Hint button only for today)
-                    HStack(spacing: 12) {
-                        NavigationLink(destination: VideoView(date: date)) {
+                    // Hint button only for today (no video button for theories)
+                    if isToday {
+                        Button {
+                            withAnimation {
+                                showHint.toggle()
+                            }
+                        } label: {
                             HStack {
-                                Image(systemName: "play.circle.fill")
-                                Text("Video")
+                                Image(systemName: showHint ? "lightbulb.fill" : "lightbulb")
+                                Text("Hint")
                                     .fontWeight(.semibold)
                             }
                             .font(.system(.body, design: .rounded))
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
                             .padding()
-                            .background(Color.blue)
+                            .background(showHint ? Color.purple : Color.blue)
                             .cornerRadius(12)
                         }
-
-                        if isToday {
-                            Button {
-                                withAnimation {
-                                    showHint.toggle()
-                                }
-                            } label: {
-                                HStack {
-                                    Image(systemName: showHint ? "lightbulb.fill" : "lightbulb")
-                                    Text("Hint")
-                                        .fontWeight(.semibold)
-                                }
-                                .font(.system(.body, design: .rounded))
-                                .foregroundStyle(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(showHint ? Color.purple : Color.blue)
-                                .cornerRadius(12)
-                            }
-                        }
+                        .padding(.horizontal, 24)
                     }
-                    .padding(.horizontal, 24)
 
                     // Hint reveal - only for today
                     if isToday && showHint {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
-                                Text("Date:")
+                                Text("Year Created:")
                                     .font(.system(.subheadline, design: .rounded))
                                     .foregroundStyle(.secondary)
-                                Text(experiment.date)
+                                Text(theory.yearCreated)
                                     .font(.system(.subheadline, design: .rounded))
                                     .fontWeight(.medium)
                             }
                             HStack {
-                                Text("Researchers:")
+                                Text("Theorists:")
                                     .font(.system(.subheadline, design: .rounded))
                                     .foregroundStyle(.secondary)
-                                Text(experiment.researchers)
+                                Text(theory.theorists)
                                     .font(.system(.subheadline, design: .rounded))
                                     .fontWeight(.medium)
                             }
@@ -298,13 +251,13 @@ struct ExperimentView: View {
                         .transition(.opacity.combined(with: .move(edge: .top)))
                     }
                 } else {
-                    // No experiment available
+                    // No theory available
                     VStack(spacing: 12) {
                         Image(systemName: "questionmark.circle")
                             .font(.system(size: 48))
                             .foregroundStyle(.gray)
 
-                        Text("No experiment available for this date")
+                        Text("No theory available for this date")
                             .font(.system(.body, design: .rounded))
                             .foregroundStyle(.secondary)
                     }
@@ -314,104 +267,18 @@ struct ExperimentView: View {
                 Spacer()
             }
         }
-        .navigationTitle("Experiment")
+        .navigationTitle("Theory")
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            await experimentManager.loadExperiment(for: date)
+            await theoryManager.loadTheory(for: date)
             await userStatsManager.loadStats()
             statsLoaded = true
         }
     }
 }
 
-struct StickFiguresView: View {
-    var body: some View {
-        Canvas { context, size in
-            let figureHeight: CGFloat = 100
-            let figureWidth: CGFloat = 50
-            let spacing: CGFloat = 60
-            let centerX = size.width / 2
-            let centerY = size.height / 2
-
-            // Left figure (facing right)
-            drawStickFigure(
-                context: context,
-                centerX: centerX - spacing,
-                centerY: centerY,
-                figureHeight: figureHeight,
-                figureWidth: figureWidth,
-                facingRight: true
-            )
-
-            // Right figure (facing left)
-            drawStickFigure(
-                context: context,
-                centerX: centerX + spacing,
-                centerY: centerY,
-                figureHeight: figureHeight,
-                figureWidth: figureWidth,
-                facingRight: false
-            )
-        }
-    }
-
-    private func drawStickFigure(context: GraphicsContext, centerX: CGFloat, centerY: CGFloat, figureHeight: CGFloat, figureWidth: CGFloat, facingRight: Bool) {
-        let headRadius: CGFloat = 12
-        let bodyLength: CGFloat = 35
-        let legLength: CGFloat = 30
-        let armLength: CGFloat = 25
-
-        let headCenterY = centerY - figureHeight / 2 + headRadius
-        let neckY = headCenterY + headRadius
-        let bodyEndY = neckY + bodyLength
-        let eyeOffsetX: CGFloat = facingRight ? 4 : -4
-
-        let strokeColor = Color.gray
-        var strokeStyle = StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
-
-        // Head
-        let headPath = Path(ellipseIn: CGRect(
-            x: centerX - headRadius,
-            y: headCenterY - headRadius,
-            width: headRadius * 2,
-            height: headRadius * 2
-        ))
-        context.stroke(headPath, with: .color(strokeColor), lineWidth: 3)
-
-        // Eye (small dot)
-        let eyePath = Path(ellipseIn: CGRect(
-            x: centerX + eyeOffsetX - 2,
-            y: headCenterY - 2,
-            width: 4,
-            height: 4
-        ))
-        context.fill(eyePath, with: .color(strokeColor))
-
-        // Body
-        var bodyPath = Path()
-        bodyPath.move(to: CGPoint(x: centerX, y: neckY))
-        bodyPath.addLine(to: CGPoint(x: centerX, y: bodyEndY))
-        context.stroke(bodyPath, with: .color(strokeColor), lineWidth: 3)
-
-        // Arms
-        var armsPath = Path()
-        let armY = neckY + 10
-        armsPath.move(to: CGPoint(x: centerX - armLength, y: armY + 15))
-        armsPath.addLine(to: CGPoint(x: centerX, y: armY))
-        armsPath.addLine(to: CGPoint(x: centerX + armLength, y: armY + 15))
-        context.stroke(armsPath, with: .color(strokeColor), lineWidth: 3)
-
-        // Legs
-        var legsPath = Path()
-        legsPath.move(to: CGPoint(x: centerX - 15, y: bodyEndY + legLength))
-        legsPath.addLine(to: CGPoint(x: centerX, y: bodyEndY))
-        legsPath.addLine(to: CGPoint(x: centerX + 15, y: bodyEndY + legLength))
-        context.stroke(legsPath, with: .color(strokeColor), lineWidth: 3)
-    }
-}
-
 #Preview {
     NavigationStack {
-        ExperimentView(date: Date())
+        TheoryView(date: Date())
     }
 }

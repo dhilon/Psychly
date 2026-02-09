@@ -29,12 +29,16 @@ class UserStatsManager: ObservableObject {
     @Published var streak: Int = 0
     @Published var worldRank: Int = 0
     @Published var viewedDates: Set<String> = []
-    @Published var answers: [String: UserAnswer] = [:]
+    @Published var answers: [String: UserAnswer] = [:]  // Legacy - kept for compatibility
+    @Published var experimentAnswers: [String: UserAnswer] = [:]
+    @Published var theoryAnswers: [String: UserAnswer] = [:]
     @Published var isLoading = false
 
-    /// Returns array of date strings where the user answered correctly
+    /// Returns array of date strings where the user answered correctly (experiment or theory)
     var correctAnswerDates: [String] {
-        answers.filter { $0.value.correct }.map { $0.key }.sorted { $0 > $1 }
+        let experimentCorrect = experimentAnswers.filter { $0.value.correct }.map { $0.key }
+        let theoryCorrect = theoryAnswers.filter { $0.value.correct }.map { $0.key }
+        return Set(experimentCorrect + theoryCorrect).sorted { $0 > $1 }
     }
 
     private let db = Firestore.firestore()
@@ -46,14 +50,38 @@ class UserStatsManager: ObservableObject {
         return formatter.string(from: date)
     }
 
+    // MARK: - Legacy Methods (for backwards compatibility)
+
     func hasAnswered(for date: Date) -> Bool {
-        let dateStr = dateString(from: date)
-        return answers[dateStr] != nil
+        return hasAnsweredExperiment(for: date)
     }
 
     func getAnswer(for date: Date) -> UserAnswer? {
+        return getExperimentAnswer(for: date)
+    }
+
+    // MARK: - Experiment Answer Methods
+
+    func hasAnsweredExperiment(for date: Date) -> Bool {
         let dateStr = dateString(from: date)
-        return answers[dateStr]
+        return experimentAnswers[dateStr] != nil
+    }
+
+    func getExperimentAnswer(for date: Date) -> UserAnswer? {
+        let dateStr = dateString(from: date)
+        return experimentAnswers[dateStr]
+    }
+
+    // MARK: - Theory Answer Methods
+
+    func hasAnsweredTheory(for date: Date) -> Bool {
+        let dateStr = dateString(from: date)
+        return theoryAnswers[dateStr] != nil
+    }
+
+    func getTheoryAnswer(for date: Date) -> UserAnswer? {
+        let dateStr = dateString(from: date)
+        return theoryAnswers[dateStr]
     }
 
     func loadStats() async {
@@ -68,75 +96,63 @@ class UserStatsManager: ObservableObject {
                 if let dates = data["viewedDates"] as? [String] {
                     viewedDates = Set(dates)
                     daysAchieved = viewedDates.count
-                    streak = calculateStreak()
-                    print("🔵 Loaded user stats: \(daysAchieved) days, \(streak) streak")
+                    print("🔵 Loaded user stats: \(daysAchieved) days")
                 }
 
-                // Load answers - check for nested structure first
-                if let answersData = data["answers"] as? [String: Any] {
-                    print("🔵 Found nested answers data: \(answersData)")
-                    for (dateStr, value) in answersData {
-                        print("🔵 Processing answer for \(dateStr): \(value)")
-                        // Handle full answer object
-                        if let answerDict = value as? [String: Any],
-                           let correct = answerDict["correct"] as? Bool {
-                            let guess = answerDict["guess"] as? String ?? ""
-                            let timestamp = (answerDict["timestamp"] as? Timestamp)?.dateValue() ?? Date()
-                            answers[dateStr] = UserAnswer(
-                                correct: correct,
-                                guess: guess,
-                                timestamp: timestamp
-                            )
-                            print("🟢 Loaded answer for \(dateStr): correct=\(correct)")
-                        }
-                        // Handle simple boolean format (for manually seeded data)
-                        else if let correct = value as? Bool {
-                            answers[dateStr] = UserAnswer(
-                                correct: correct,
-                                guess: "",
-                                timestamp: Date()
-                            )
-                            print("🟢 Loaded simple answer for \(dateStr): correct=\(correct)")
-                        }
-                    }
-                    print("🔵 Loaded \(answers.count) answers total")
-                } else {
-                    // Check for flat "answers.YYYY-MM-DD" keys (manually seeded data)
-                    print("🔵 Checking for flat answer keys in: \(data.keys)")
-                    for key in data.keys {
-                        if key.hasPrefix("answers.") {
-                            let dateStr = String(key.dropFirst("answers.".count))
-                            if let answerDict = data[key] as? [String: Any],
-                               let correct = answerDict["correct"] as? Bool {
-                                let guess = answerDict["guess"] as? String ?? ""
-                                let timestamp = (answerDict["timestamp"] as? Timestamp)?.dateValue() ?? Date()
-                                answers[dateStr] = UserAnswer(
-                                    correct: correct,
-                                    guess: guess,
-                                    timestamp: timestamp
-                                )
-                                print("🟢 Loaded flat answer for \(dateStr): correct=\(correct)")
-                            } else if let correct = data[key] as? Bool {
-                                answers[dateStr] = UserAnswer(
-                                    correct: correct,
-                                    guess: "",
-                                    timestamp: Date()
-                                )
-                                print("🟢 Loaded flat boolean answer for \(dateStr): correct=\(correct)")
+                // Load experiment answers
+                if let expAnswersData = data["experimentAnswers"] as? [String: Any] {
+                    print("🔵 Found experimentAnswers data: \(expAnswersData)")
+                    loadAnswersFromData(expAnswersData, into: &experimentAnswers, label: "experiment")
+                }
+
+                // Load theory answers
+                if let theoryAnswersData = data["theoryAnswers"] as? [String: Any] {
+                    print("🔵 Found theoryAnswers data: \(theoryAnswersData)")
+                    loadAnswersFromData(theoryAnswersData, into: &theoryAnswers, label: "theory")
+                }
+
+                // Migration: Load legacy "answers" into experimentAnswers if experimentAnswers is empty
+                if experimentAnswers.isEmpty {
+                    if let answersData = data["answers"] as? [String: Any] {
+                        print("🔵 Migrating legacy answers to experimentAnswers")
+                        loadAnswersFromData(answersData, into: &experimentAnswers, label: "legacy->experiment")
+                        // Also keep in legacy answers for backwards compatibility
+                        answers = experimentAnswers
+                    } else {
+                        // Check for flat "answers.YYYY-MM-DD" keys (manually seeded data)
+                        print("🔵 Checking for flat answer keys in: \(data.keys)")
+                        for key in data.keys {
+                            if key.hasPrefix("answers.") {
+                                let dateStr = String(key.dropFirst("answers.".count))
+                                if let answerDict = data[key] as? [String: Any],
+                                   let correct = answerDict["correct"] as? Bool {
+                                    let guess = answerDict["guess"] as? String ?? ""
+                                    let timestamp = (answerDict["timestamp"] as? Timestamp)?.dateValue() ?? Date()
+                                    let answer = UserAnswer(correct: correct, guess: guess, timestamp: timestamp)
+                                    experimentAnswers[dateStr] = answer
+                                    answers[dateStr] = answer
+                                    print("🟢 Loaded flat answer for \(dateStr): correct=\(correct)")
+                                } else if let correct = data[key] as? Bool {
+                                    let answer = UserAnswer(correct: correct, guess: "", timestamp: Date())
+                                    experimentAnswers[dateStr] = answer
+                                    answers[dateStr] = answer
+                                    print("🟢 Loaded flat boolean answer for \(dateStr): correct=\(correct)")
+                                }
                             }
                         }
                     }
-                    if answers.isEmpty {
-                        print("🟡 No answers found in any format")
-                    } else {
-                        print("🔵 Loaded \(answers.count) answers from flat keys")
-                    }
                 }
+
+                // Calculate streak with new combined logic
+                streak = calculateStreak()
+                print("🔵 Calculated streak: \(streak)")
             } else {
                 viewedDates = []
                 daysAchieved = 0
                 streak = 0
                 answers = [:]
+                experimentAnswers = [:]
+                theoryAnswers = [:]
             }
 
             // Calculate world rank
@@ -146,6 +162,22 @@ class UserStatsManager: ObservableObject {
         }
 
         isLoading = false
+    }
+
+    private func loadAnswersFromData(_ data: [String: Any], into answers: inout [String: UserAnswer], label: String) {
+        for (dateStr, value) in data {
+            if let answerDict = value as? [String: Any],
+               let correct = answerDict["correct"] as? Bool {
+                let guess = answerDict["guess"] as? String ?? ""
+                let timestamp = (answerDict["timestamp"] as? Timestamp)?.dateValue() ?? Date()
+                answers[dateStr] = UserAnswer(correct: correct, guess: guess, timestamp: timestamp)
+                print("🟢 Loaded \(label) answer for \(dateStr): correct=\(correct)")
+            } else if let correct = value as? Bool {
+                answers[dateStr] = UserAnswer(correct: correct, guess: "", timestamp: Date())
+                print("🟢 Loaded simple \(label) answer for \(dateStr): correct=\(correct)")
+            }
+        }
+        print("🔵 Loaded \(answers.count) \(label) answers total")
     }
 
     private func calculateWorldRank() async {
@@ -213,21 +245,28 @@ class UserStatsManager: ObservableObject {
         }
     }
 
+    // MARK: - Legacy recordAnswer (maps to experiment)
     func recordAnswer(for date: Date, correct: Bool, guess: String) async {
+        await recordExperimentAnswer(for: date, correct: correct, guess: guess)
+    }
+
+    // MARK: - Record Experiment Answer
+    func recordExperimentAnswer(for date: Date, correct: Bool, guess: String) async {
         guard let userId = Auth.auth().currentUser?.uid else { return }
 
         let dateStr = dateString(from: date)
 
         // Don't record if already answered
-        if answers[dateStr] != nil {
-            print("🔵 Already answered for \(dateStr), skipping")
+        if experimentAnswers[dateStr] != nil {
+            print("🔵 Already answered experiment for \(dateStr), skipping")
             return
         }
 
         let answer = UserAnswer(correct: correct, guess: guess, timestamp: Date())
 
         // Update local state
-        answers[dateStr] = answer
+        experimentAnswers[dateStr] = answer
+        answers[dateStr] = answer  // Keep legacy in sync
         viewedDates.insert(dateStr)
         daysAchieved = viewedDates.count
         streak = calculateStreak()
@@ -236,14 +275,49 @@ class UserStatsManager: ObservableObject {
             // Save to Firestore
             try await db.collection("userStats").document(userId).setData([
                 "viewedDates": FieldValue.arrayUnion([dateStr]),
-                "answers.\(dateStr)": answer.asDictionary
+                "experimentAnswers.\(dateStr)": answer.asDictionary
             ], merge: true)
-            print("🟢 Recorded answer for \(dateStr). Correct: \(correct)")
+            print("🟢 Recorded experiment answer for \(dateStr). Correct: \(correct)")
 
             // Recalculate world rank after recording
             await calculateWorldRank()
         } catch {
-            print("🔴 Error recording answer: \(error.localizedDescription)")
+            print("🔴 Error recording experiment answer: \(error.localizedDescription)")
+        }
+    }
+
+    // MARK: - Record Theory Answer
+    func recordTheoryAnswer(for date: Date, correct: Bool, guess: String) async {
+        guard let userId = Auth.auth().currentUser?.uid else { return }
+
+        let dateStr = dateString(from: date)
+
+        // Don't record if already answered
+        if theoryAnswers[dateStr] != nil {
+            print("🔵 Already answered theory for \(dateStr), skipping")
+            return
+        }
+
+        let answer = UserAnswer(correct: correct, guess: guess, timestamp: Date())
+
+        // Update local state
+        theoryAnswers[dateStr] = answer
+        viewedDates.insert(dateStr)
+        daysAchieved = viewedDates.count
+        streak = calculateStreak()
+
+        do {
+            // Save to Firestore
+            try await db.collection("userStats").document(userId).setData([
+                "viewedDates": FieldValue.arrayUnion([dateStr]),
+                "theoryAnswers.\(dateStr)": answer.asDictionary
+            ], merge: true)
+            print("🟢 Recorded theory answer for \(dateStr). Correct: \(correct)")
+
+            // Recalculate world rank after recording
+            await calculateWorldRank()
+        } catch {
+            print("🔴 Error recording theory answer: \(error.localizedDescription)")
         }
     }
 
@@ -254,7 +328,12 @@ class UserStatsManager: ObservableObject {
 
         while true {
             let dateStr = dateString(from: checkDate)
-            if viewedDates.contains(dateStr) {
+
+            // Streak continues if user answered EITHER game correctly
+            let experimentCorrect = experimentAnswers[dateStr]?.correct == true
+            let theoryCorrect = theoryAnswers[dateStr]?.correct == true
+
+            if experimentCorrect || theoryCorrect {
                 currentStreak += 1
                 checkDate = calendar.date(byAdding: .day, value: -1, to: checkDate)!
             } else {

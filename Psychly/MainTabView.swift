@@ -17,7 +17,7 @@ struct MainTabView: View {
 
             CalendarView()
                 .tabItem {
-                    Label("Calendar", systemImage: "calendar")
+                    Label("Calendars", systemImage: "calendar")
                 }
 
             ProfileView()

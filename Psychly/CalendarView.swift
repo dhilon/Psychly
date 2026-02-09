@@ -95,8 +95,16 @@ struct CalendarView: View {
                 }
                 .padding(.horizontal, 16)
             }
-            .navigationTitle("Calendar")
+            .navigationTitle("Experiments")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    NavigationLink(destination: TheoryCalendarView()) {
+                        Image(systemName: "lightbulb.fill")
+                            .foregroundStyle(.orange)
+                    }
+                }
+            }
             .task {
                 await calendarManager.loadExperimentDates()
                 await userStatsManager.loadStats()
@@ -201,6 +209,13 @@ struct DayCell: View {
             Circle()
                 .fill(backgroundColor)
                 .frame(width: min(height * 0.8, 44), height: min(height * 0.8, 44))
+
+            // Red/green outline for answered cells
+            if answerState != nil {
+                Circle()
+                    .stroke(badgeColor, lineWidth: 3)
+                    .frame(width: min(height * 0.8, 44), height: min(height * 0.8, 44))
+            }
 
             // Badge icon behind the number (subtle, larger)
             if let icon = badgeIcon, answerState != nil {

@@ -12,7 +12,7 @@ class GeminiService {
     static let shared = GeminiService()
 
     private let apiKey: String
-    private let baseURL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+    private let baseURL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
 
     private init() {
         // Load API key from Secrets.plist
@@ -24,39 +24,6 @@ class GeminiService {
             print("🔴 Warning: Could not load GEMINI_API_KEY from Secrets.plist")
             self.apiKey = ""
         }
-    }
-
-    func getRandomNumber() async throws -> Int {
-        let url = URL(string: "\(baseURL)?key=\(apiKey)")!
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        let body: [String: Any] = [
-            "contents": [
-                [
-                    "parts": [
-                        ["text": "Generate a random number between 1 and 10. Only respond with the number, nothing else."]
-                    ]
-                ]
-            ]
-        ]
-
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-
-        let (data, _) = try await URLSession.shared.data(for: request)
-
-        let response = try JSONDecoder().decode(GeminiResponse.self, from: data)
-
-        if let text = response.candidates?.first?.content?.parts?.first?.text {
-            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            if let number = Int(trimmed) {
-                return number
-            }
-        }
-
-        return Int.random(in: 1...10)
     }
 
     func getRandomExperiment(excludingNames: [String]) async throws -> Experiment {
@@ -852,4 +819,268 @@ struct HypothesisResult: Codable {
 struct GuessCheckResult: Codable {
     let correct: Bool
     let reasoning: String?
+}
+
+// MARK: - Theory Generation
+
+extension GeminiService {
+    func getRandomTheory(excludingNames: [String]) async throws -> Theory {
+        let url = URL(string: "\(baseURL)?key=\(apiKey)")!
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let excludeList = excludingNames.isEmpty ? "none" : excludingNames.joined(separator: ", ")
+
+        let prompt = """
+        Generate a random famous psychology theory. Do NOT use any of these theories: \(excludeList).
+
+        Respond ONLY with valid JSON in this exact format (no markdown, no code blocks, just raw JSON):
+        {
+            "name": "Name of the theory",
+            "info": "A brief 2-3 sentence description of what the theory explains and its key concepts, without mentioning the theory name",
+            "yearCreated": "Year or decade when it was first proposed",
+            "theorists": "Names of the primary theorists who developed it"
+        }
+        """
+
+        let body: [String: Any] = [
+            "contents": [
+                [
+                    "parts": [
+                        ["text": prompt]
+                    ]
+                ]
+            ]
+        ]
+
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        if let httpResponse = response as? HTTPURLResponse {
+            print("🔵 Gemini API Status Code (Theory): \(httpResponse.statusCode)")
+        }
+
+        if let rawString = String(data: data, encoding: .utf8) {
+            print("🔵 Gemini Raw Response (Theory): \(rawString)")
+        }
+
+        let geminiResponse = try JSONDecoder().decode(GeminiResponse.self, from: data)
+
+        if let text = geminiResponse.candidates?.first?.content?.parts?.first?.text {
+            print("🔵 Gemini Text Content (Theory): \(text)")
+
+            let cleaned = text
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .replacingOccurrences(of: "```json", with: "")
+                .replacingOccurrences(of: "```", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+
+            print("🔵 Cleaned JSON (Theory): \(cleaned)")
+
+            if let jsonData = cleaned.data(using: .utf8) {
+                do {
+                    let theory = try JSONDecoder().decode(Theory.self, from: jsonData)
+                    print("🟢 Successfully parsed theory: \(theory.name)")
+                    return theory
+                } catch {
+                    print("🔴 JSON Decode Error (Theory): \(error)")
+                    throw error
+                }
+            }
+        } else {
+            print("🔴 No text content in Gemini response (Theory)")
+        }
+
+        // Fallback to local theories if API fails
+        print("🟡 Using fallback theory")
+        return getRandomFallbackTheory(excludingNames: excludingNames)
+    }
+
+    func checkTheoryGuess(userGuess: String, actualName: String) async throws -> GuessResult {
+        let url = URL(string: "\(baseURL)?key=\(apiKey)")!
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let prompt = """
+        I'm playing a psychology theory guessing game. The actual theory name is "\(actualName)".
+        The user guessed: "\(userGuess)"
+
+        STRICT RULES - The guess must demonstrate specific knowledge of THIS theory:
+
+        REJECT the guess if:
+        - It's too generic (e.g., "theory", "psychology theory", "the theory")
+        - It only mentions a broad concept without the specific theory name
+        - It names a completely different theory
+        - It's just random words or gibberish
+
+        ACCEPT the guess if:
+        - It contains the distinctive identifier (e.g., "Attachment", "Maslow", "Cognitive Dissonance")
+        - It's an abbreviated but specific version (e.g., "maslow's hierarchy" for "Maslow's Hierarchy of Needs")
+        - It's a well-known alternate name for the same theory
+        - It has minor typos but the specific theory is clearly identifiable
+        - It uses slightly different wording but refers to the same specific theory
+
+        The key test: Would a psychology professor agree the student knows which specific theory this is?
+
+        Respond ONLY with valid JSON in this exact format (no markdown, no code blocks):
+        {"correct": true} or {"correct": false, "reasoning": "brief explanation of why it's wrong"}
+        """
+
+        let body: [String: Any] = [
+            "contents": [
+                [
+                    "parts": [
+                        ["text": prompt]
+                    ]
+                ]
+            ]
+        ]
+
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, _) = try await URLSession.shared.data(for: request)
+
+        let response = try JSONDecoder().decode(GeminiResponse.self, from: data)
+
+        if let text = response.candidates?.first?.content?.parts?.first?.text {
+            let cleaned = text
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .replacingOccurrences(of: "```json", with: "")
+                .replacingOccurrences(of: "```", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+
+            if let jsonData = cleaned.data(using: .utf8) {
+                let result = try JSONDecoder().decode(GuessCheckResult.self, from: jsonData)
+                return GuessResult(isCorrect: result.correct, reasoning: result.reasoning)
+            }
+        }
+
+        return GuessResult(isCorrect: false, reasoning: nil)
+    }
+
+    func categorizeTheory(name: String, info: String) async throws -> String {
+        let url = URL(string: "\(baseURL)?key=\(apiKey)")!
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let prompt = """
+        Categorize this psychology theory into ONE of these categories:
+        - social (social psychology, group dynamics)
+        - cognitive (thinking, decision making, mental processes)
+        - developmental (child development, aging, lifespan)
+        - behavioral (conditioning, behavior modification)
+        - emotional (emotions, affect, mood)
+        - personality (traits, individual differences)
+        - learning (education, skill acquisition)
+        - motivation (goals, drives, needs)
+        - attachment (bonding, relationships)
+        - humanistic (self-actualization, growth)
+        - psychodynamic (unconscious, defense mechanisms)
+        - biological (brain, genetics, evolution)
+
+        Theory: "\(name)"
+        Description: "\(info)"
+
+        Respond with ONLY the category name, nothing else.
+        """
+
+        let body: [String: Any] = [
+            "contents": [
+                [
+                    "parts": [
+                        ["text": prompt]
+                    ]
+                ]
+            ]
+        ]
+
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, _) = try await URLSession.shared.data(for: request)
+
+        let response = try JSONDecoder().decode(GeminiResponse.self, from: data)
+
+        if let text = response.candidates?.first?.content?.parts?.first?.text {
+            let category = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            print("🔵 Categorized theory '\(name)' as: \(category)")
+            return category
+        }
+
+        return "default"
+    }
+
+    private func getRandomFallbackTheory(excludingNames: [String]) -> Theory {
+        let fallbackTheories = [
+            Theory(
+                name: "Attachment Theory",
+                info: "This theory explains how early emotional bonds between infants and caregivers shape social and emotional development throughout life. It identifies different attachment styles that influence relationships and behavior in adulthood.",
+                yearCreated: "1969",
+                theorists: "John Bowlby, Mary Ainsworth"
+            ),
+            Theory(
+                name: "Maslow's Hierarchy of Needs",
+                info: "A motivational theory proposing that human needs are arranged in a hierarchical structure, from basic physiological needs to self-actualization. Lower-level needs must be satisfied before higher-level needs become motivating.",
+                yearCreated: "1943",
+                theorists: "Abraham Maslow"
+            ),
+            Theory(
+                name: "Cognitive Dissonance Theory",
+                info: "This theory describes the mental discomfort experienced when holding contradictory beliefs, values, or attitudes. People are motivated to reduce this discomfort by changing their attitudes or rationalizing their behavior.",
+                yearCreated: "1957",
+                theorists: "Leon Festinger"
+            ),
+            Theory(
+                name: "Social Learning Theory",
+                info: "A theory explaining how people learn behaviors by observing others and imitating their actions. It emphasizes the role of modeling, reinforcement, and cognitive processes in learning.",
+                yearCreated: "1977",
+                theorists: "Albert Bandura"
+            ),
+            Theory(
+                name: "Psychoanalytic Theory",
+                info: "A comprehensive theory of personality and psychotherapy that emphasizes the role of unconscious mental processes, early childhood experiences, and internal conflicts in shaping behavior and mental health.",
+                yearCreated: "1900",
+                theorists: "Sigmund Freud"
+            ),
+            Theory(
+                name: "Erikson's Stages of Psychosocial Development",
+                info: "A developmental theory proposing eight stages of psychosocial development throughout the lifespan, each characterized by a specific crisis or challenge that must be resolved for healthy development.",
+                yearCreated: "1950",
+                theorists: "Erik Erikson"
+            ),
+            Theory(
+                name: "Piaget's Theory of Cognitive Development",
+                info: "A stage theory describing how children construct knowledge through interaction with their environment, progressing through distinct stages of cognitive development from infancy to adolescence.",
+                yearCreated: "1936",
+                theorists: "Jean Piaget"
+            ),
+            Theory(
+                name: "Classical Conditioning",
+                info: "A learning process where a neutral stimulus becomes associated with a meaningful stimulus, eventually triggering a similar response. This explains how emotional and physiological responses can be learned.",
+                yearCreated: "1897",
+                theorists: "Ivan Pavlov"
+            ),
+            Theory(
+                name: "Operant Conditioning",
+                info: "A learning theory based on the principle that behaviors are strengthened or weakened by their consequences. Reinforcement increases behavior frequency while punishment decreases it.",
+                yearCreated: "1938",
+                theorists: "B.F. Skinner"
+            ),
+            Theory(
+                name: "Self-Determination Theory",
+                info: "A theory of motivation focusing on three innate psychological needs: autonomy, competence, and relatedness. Fulfillment of these needs promotes intrinsic motivation and psychological well-being.",
+                yearCreated: "1985",
+                theorists: "Edward Deci, Richard Ryan"
+            )
+        ]
+
+        let available = fallbackTheories.filter { !excludingNames.contains($0.name) }
+        return available.randomElement() ?? fallbackTheories[0]
+    }
 }
